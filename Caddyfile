@@ -1,0 +1,15 @@
+# Site statique
+bastien-site.duckdns.org {
+	root * /srv
+	file_server
+	encode gzip
+
+	# ne pas exposer les fichiers internes
+	@hidden path /.git* /Caddyfile /docker-compose.yml /README.md /import.html /caribou-dump.json
+	respond @hidden 404
+}
+
+# PocketBase (base locale) — API + admin (/_/)
+bastien-db.duckdns.org {
+	reverse_proxy pocketbase:8090
+}

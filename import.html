@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caribou — Import du dump vers PocketBase</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; background: #0b1120; color: #e2e8f0; }
+    h1 { font-size: 1.3rem; }
+    input, button { font-size: 1rem; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #141f36; color: #e2e8f0; }
+    input { width: 100%; box-sizing: border-box; margin: 6px 0 16px; }
+    button { background: #f59e0b; color: #0b1120; font-weight: 700; border: none; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    pre { background: #141f36; border: 1px solid #334155; border-radius: 8px; padding: 12px; white-space: pre-wrap; max-height: 320px; overflow: auto; }
+    .warn { color: #fbbf24; }
+    a { color: #38bdf8; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.5/dist/pocketbase.umd.js"></script>
+</head>
+<body>
+  <h1>🍁 Import du dump → PocketBase</h1>
+  <p>À lancer <strong>une seule fois</strong>, après avoir créé les collections <code>expenses</code> et <code>meta</code>.
+  Relancer = doublons. Ouvre ce fichier en local (double-clic) ou sers-le.</p>
+
+  <label>URL PocketBase</label>
+  <input id="url" value="https://bastien-db.duckdns.org">
+
+  <label>Fichier dump (laisse vide pour charger <code>caribou-dump.json</code> à côté)</label>
+  <input id="file" type="file" accept="application/json">
+
+  <button id="go">Importer</button>
+  <pre id="log">Prêt.</pre>
+
+  <script>
+    var logEl = document.getElementById("log");
+    function log(m) { logEl.textContent += "\n" + m; logEl.scrollTop = logEl.scrollHeight; }
+
+    async function loadDump() {
+      var f = document.getElementById("file").files[0];
+      if (f) return JSON.parse(await f.text());
+      var r = await fetch("caribou-dump.json");
+      if (!r.ok) throw new Error("caribou-dump.json introuvable — choisis le fichier à la main.");
+      return r.json();
+    }
+
+    document.getElementById("go").addEventListener("click", async function () {
+      var btn = this; btn.disabled = true; logEl.textContent = "Démarrage…";
+      try {
+        var pb = new PocketBase(document.getElementById("url").value.trim());
+        pb.autoCancellation(false);
+        var dump = await loadDump();
+
+        var existing = await pb.collection("expenses").getList(1, 1);
+        if (existing.totalItems > 0) {
+          if (!confirm("La collection expenses contient déjà " + existing.totalItems + " lignes. Importer quand même (risque de doublons) ?")) {
+            log("Annulé."); btn.disabled = false; return;
+          }
+        }
+
+        var exps = dump.expenses || [];
+        log("Dépenses : " + exps.length);
+        for (var i = 0; i < exps.length; i++) {
+          var e = exps[i];
+          await pb.collection("expenses").create({
+            title: e.title, amount: e.amount, currency: e.currency, payerId: e.payerId,
+            participants: e.participants || [], category: e.category, date: e.date,
+            type: e.type || "", createdBy: e.createdBy || "", createdAt: e.createdAt || ""
+          });
+          if ((i + 1) % 10 === 0) log("  " + (i + 1) + "/" + exps.length);
+        }
+        log("Dépenses OK.");
+
+        var t = dump.trip || {};
+        var k, c, n = 0;
+        for (k in (t.challenges || {})) { c = t.challenges[k]; await pb.collection("meta").create({ kind: "challenge", data: { text: c.text, createdBy: c.createdBy, createdAt: c.createdAt } }); n++; }
+        for (k in (t.cities || {})) { c = t.cities[k]; await pb.collection("meta").create({ kind: "city", data: { name: c.name, addedBy: c.addedBy, createdAt: c.createdAt } }); n++; }
+        for (k in (t.hikes || {})) { c = t.hikes[k]; await pb.collection("meta").create({ kind: "hike", data: { name: c.name, addedBy: c.addedBy, createdAt: c.createdAt } }); n++; }
+        for (k in (t.wheel || {})) { await pb.collection("meta").create({ kind: "wheel", data: t.wheel[k] }); n++; }
+        if (typeof t.eurToCad === "number") { await pb.collection("meta").create({ kind: "setting", data: { eurToCad: t.eurToCad } }); n++; }
+        log("Meta OK (" + n + " enregistrements).");
+
+        log("\n✅ Import terminé. Ouvre le site.");
+      } catch (err) {
+        log("\n❌ Erreur : " + (err && err.message ? err.message : err));
+        log("Vérifie l'URL, que les collections existent et que leurs règles create sont ouvertes (publiques).");
+      }
+      btn.disabled = false;
+    });
+  </script>
+</body>
+</html>

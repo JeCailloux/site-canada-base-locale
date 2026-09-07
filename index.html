@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0B1120">
+  <title>Caribou — Les comptes du Canada</title>
+  <meta name="description" content="Partage de dépenses entre potes pour le voyage au Canada.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-110 -110 220 220'%3E%3Cpath fill='%23F59E0B' d='m 0,-100 14,27 c 2,4 5,5 9,3 l 22,-11 -12,61 c -1,6 3,8 7,4 l 12,-14 8,19 c 2,4 5,4 8,3 l 21,-5 -7,25 c -1,4 0,7 4,8 l 8,3 -49,41 c -3,3 -4,6 -3,10 l 4,13 -38,-7 c -5,-1 -8,2 -8,6 l 2,41 -12,0 2,-41 c 0,-4 -3,-7 -8,-6 l -38,7 4,-13 c 1,-4 0,-7 -3,-10 l -49,-41 8,-3 c 4,-1 5,-4 4,-8 l -7,-25 21,5 c 3,1 6,1 8,-3 l 8,-19 12,14 c 4,4 8,2 7,-4 l -12,-61 22,11 c 4,2 7,1 9,-3 z'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ===== Fond 3D (aurores boréales + montagnes + neige) ===== -->
+  <canvas id="bg3d" aria-hidden="true"></canvas>
+
+  <!-- ===== Caribou qui court (vidéo, fondue dans la scène 3D) ===== -->
+  <div id="video-bg" aria-hidden="true">
+    <video class="vbg" src="assets/caribou.mp4" muted playsinline autoplay preload="auto"></video>
+    <video class="vbg" src="assets/caribou.mp4" muted playsinline preload="auto"></video>
+    <div class="video-veil"></div>
+  </div>
+
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ================= VUE LOGIN ================= -->
+  <main id="view-login" class="view-login">
+    <div class="login-wrap">
+      <header class="brand reveal">
+        <svg class="leaf" viewBox="-110 -110 220 220" aria-hidden="true">
+          <path d="m 0,-100 14,27 c 2,4 5,5 9,3 l 22,-11 -12,61 c -1,6 3,8 7,4 l 12,-14 8,19 c 2,4 5,4 8,3 l 21,-5 -7,25 c -1,4 0,7 4,8 l 8,3 -49,41 c -3,3 -4,6 -3,10 l 4,13 -38,-7 c -5,-1 -8,2 -8,6 l 2,41 -12,0 2,-41 c 0,-4 -3,-7 -8,-6 l -38,7 4,-13 c 1,-4 0,-7 -3,-10 l -49,-41 8,-3 c 4,-1 5,-4 4,-8 l -7,-25 21,5 c 3,1 6,1 8,-3 l 8,-19 12,14 c 4,4 8,2 7,-4 l -12,-61 22,11 c 4,2 7,1 9,-3 z"/>
+        </svg>
+        <span class="brand-name">CARIBOU</span>
+      </header>
+
+      <h1 class="login-title reveal">
+        <span class="line">Le grand nord,</span>
+        <span class="line accent" id="trip-name-hero">les comptes clairs.</span>
+      </h1>
+      <p class="login-sub reveal" id="trip-tagline">Le tricount du crew pour le Canada. Qui paie la poutine ?</p>
+
+      <form class="login-card reveal" id="login-form" autocomplete="off">
+        <p class="login-card-label">Qui es-tu ?</p>
+        <div class="avatar-grid" id="avatar-grid" role="radiogroup" aria-label="Choisis ton compte"></div>
+
+        <label class="field">
+          <span class="field-label">Mot de passe</span>
+          <span class="field-input-wrap">
+            <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+            <button type="button" class="eye-btn" id="toggle-pass" aria-label="Afficher le mot de passe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </span>
+        </label>
+
+        <p class="login-error" id="login-error" role="alert" hidden></p>
+
+        <button type="submit" class="btn-primary" id="login-btn">
+          <span>Embarquer</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </button>
+
+        <p class="login-hint">Connexion unique — tu resteras connecté sur cet appareil.</p>
+      </form>
+    </div>
+  </main>
+
+  <!-- ================= VUE APP ================= -->
+  <div id="view-app" class="view-app" hidden>
+
+    <header class="topbar">
+      <div class="topbar-brand">
+        <svg class="leaf small" viewBox="-110 -110 220 220" aria-hidden="true">
+          <path d="m 0,-100 14,27 c 2,4 5,5 9,3 l 22,-11 -12,61 c -1,6 3,8 7,4 l 12,-14 8,19 c 2,4 5,4 8,3 l 21,-5 -7,25 c -1,4 0,7 4,8 l 8,3 -49,41 c -3,3 -4,6 -3,10 l 4,13 -38,-7 c -5,-1 -8,2 -8,6 l 2,41 -12,0 2,-41 c 0,-4 -3,-7 -8,-6 l -38,7 4,-13 c 1,-4 0,-7 -3,-10 l -49,-41 8,-3 c 4,-1 5,-4 4,-8 l -7,-25 21,5 c 3,1 6,1 8,-3 l 8,-19 12,14 c 4,4 8,2 7,-4 l -12,-61 22,11 c 4,2 7,1 9,-3 z"/>
+        </svg>
+        <span class="brand-name">CARIBOU</span>
+        <span class="trip-chip" id="trip-chip">Canada</span>
+      </div>
+      <div class="topbar-user">
+        <div class="cur-switch" id="cur-switch" role="group" aria-label="Devise d'affichage">
+          <button type="button" class="cur-btn active" data-cur="CAD">$&nbsp;CAD</button>
+          <button type="button" class="cur-btn" data-cur="EUR">€&nbsp;EUR</button>
+        </div>
+        <span class="user-chip" id="user-chip"></span>
+        <button class="icon-btn" id="logout-btn" aria-label="Se déconnecter" title="Se déconnecter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Navigation principale">
+      <button class="tab active" data-tab="resume">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>
+        <span>Résumé</span>
+      </button>
+      <button class="tab" data-tab="depenses">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        <span>Dépenses</span>
+      </button>
+      <button class="tab" data-tab="equilibre">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m5 8 7-5 7 5"/><path d="M3 21h18"/><path d="M5 8 3 14a3.4 3.4 0 0 0 4 0L5 8Z"/><path d="m19 8-2 6a3.4 3.4 0 0 0 4 0l-2-6Z"/></svg>
+        <span>Équilibre</span>
+      </button>
+      <button class="tab" data-tab="stats">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        <span>Stats</span>
+      </button>
+      <button class="tab" data-tab="voyage">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3 4v14l6 2.5m0-14 6 2.5m-6-2.5v14m6-11.5 6-2.5v14l-6 2.5m0-14v14m0-14-6-2.5"/></svg>
+        <span>Voyage</span>
+      </button>
+      <button class="tab" data-tab="conduite">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 9.5V3M9.9 13.7 5 18M14.1 13.7 19 18"/></svg>
+        <span>Conduite</span>
+      </button>
+      <button class="tab" data-tab="defis">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <span>Défis</span>
+      </button>
+      <button class="tab" data-tab="reglages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        <span>Réglages</span>
+      </button>
+    </nav>
+
+    <main class="content">
+
+      <!-- ===== Résumé ===== -->
+      <section id="tab-resume" class="tab-panel active">
+        <div class="stat-row">
+          <article class="card stat-card stat-total">
+            <p class="stat-label">Total du voyage</p>
+            <p class="stat-value" id="stat-total">0,00 $</p>
+            <p class="stat-foot" id="stat-total-eur"></p>
+          </article>
+          <article class="card stat-card">
+            <p class="stat-label">Ton solde</p>
+            <p class="stat-value" id="stat-balance">0,00 $</p>
+            <p class="stat-foot" id="stat-balance-hint"></p>
+          </article>
+          <article class="card stat-card">
+            <p class="stat-label">Dépenses</p>
+            <p class="stat-value" id="stat-count">0</p>
+            <p class="stat-foot" id="stat-days"></p>
+          </article>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h2 class="card-title">Soldes du crew</h2>
+            <div id="balance-bars" class="balance-bars"></div>
+          </article>
+          <article class="card">
+            <h2 class="card-title">Par catégorie</h2>
+            <div id="category-bars" class="category-bars"></div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-head">
+            <h2 class="card-title">Dernières dépenses</h2>
+            <button class="link-btn" data-goto="depenses">Tout voir</button>
+          </div>
+          <ul id="recent-list" class="expense-list"></ul>
+        </article>
+      </section>
+
+      <!-- ===== Dépenses ===== -->
+      <section id="tab-depenses" class="tab-panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Toutes les dépenses</h2>
+          <button class="btn-primary btn-sm" id="add-expense-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span>Ajouter</span>
+          </button>
+        </div>
+        <div id="expense-groups"></div>
+      </section>
+
+      <!-- ===== Équilibre ===== -->
+      <section id="tab-equilibre" class="tab-panel">
+        <article class="card">
+          <h2 class="card-title">Qui doit quoi</h2>
+          <div id="balance-cards" class="balance-cards"></div>
+        </article>
+        <article class="card">
+          <h2 class="card-title">Remboursements conseillés</h2>
+          <p class="card-sub">Le minimum de virements pour remettre tout le monde à zéro.</p>
+          <ul id="settlement-list" class="settlement-list"></ul>
+        </article>
+      </section>
+
+      <!-- ===== Stats ===== -->
+      <section id="tab-stats" class="tab-panel">
+        <article class="card stat-hero">
+          <div class="stat-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+          </div>
+          <div>
+            <p class="stat-label">Dépenses réelles</p>
+            <p class="stat-value stat-hero-value" id="stats-hero-total">0,00 $</p>
+            <p class="stat-foot" id="stats-hero-foot">Ces dollars sont partis vivre leur vie.</p>
+            <p class="stat-foot stats-remb" id="stats-remb" hidden></p>
+          </div>
+        </article>
+
+        <div class="grid-2">
+          <article class="card">
+            <h2 class="card-title">Où est parti l'argent</h2>
+            <div class="donut-wrap">
+              <svg id="stats-donut" viewBox="0 0 180 180" role="img" aria-label="Répartition des dépenses par catégorie"></svg>
+              <ul id="stats-legend" class="donut-legend"></ul>
+            </div>
+          </article>
+          <article class="card">
+            <h2 class="card-title">L'hémorragie dans le temps</h2>
+            <p class="card-sub">Total cumulé, jour après jour.</p>
+            <svg id="stats-timeline" viewBox="0 0 320 160" role="img" aria-label="Courbe du total dépensé au fil des jours" preserveAspectRatio="none"></svg>
+            <p class="chart-x-labels"><span id="tl-start"></span><span id="tl-end"></span></p>
+          </article>
+        </div>
+
+        <article class="card">
+          <h2 class="card-title">Le podium des flambeurs</h2>
+          <p class="card-sub">Qui a le plus sorti la carte bleue.</p>
+          <div id="stats-podium" class="podium"></div>
+        </article>
+
+        <div id="stats-records" class="records-grid"></div>
+      </section>
+
+      <!-- ===== Voyage (agence) ===== -->
+      <section id="tab-voyage" class="tab-panel">
+        <article class="card agency-hero">
+          <div class="agency-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3 4v14l6 2.5 6-2.5 6 2.5V4l-6 2.5-6-2.5Z"/><path d="M9 4v14M15 6.5v14"/></svg>
+          </div>
+          <div>
+            <p class="agency-kicker">Agence Caribou</p>
+            <h2 class="agency-title">Notre carnet de voyage</h2>
+            <p class="agency-sub">Les villes qu'on rêve de voir et les randos qu'on veut se faire. À cocher une fois sur place.</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Villes à visiter</h2>
+          <form id="city-form" class="wish-form">
+            <input type="text" id="city-input" placeholder="Montréal, Québec, Tofino…" maxlength="60" required>
+            <button type="submit" class="btn-primary btn-sm">Ajouter</button>
+          </form>
+          <ul id="city-list" class="wish-list"></ul>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Randonnées à faire</h2>
+          <form id="hike-form" class="wish-form">
+            <input type="text" id="hike-input" placeholder="Lac Louise, Mont Royal, Grouse Grind…" maxlength="60" required>
+            <button type="submit" class="btn-primary btn-sm">Ajouter</button>
+          </form>
+          <ul id="hike-list" class="wish-list"></ul>
+        </article>
+      </section>
+
+      <!-- ===== Conduite (jeu des doigts + roulette) ===== -->
+      <section id="tab-conduite" class="tab-panel">
+        <article class="card">
+          <h2 class="card-title">Le jeu des doigts</h2>
+          <p class="card-sub">Chacun pose un doigt sur la zone. Après le décompte, le doigt qui s'allume prend le volant.</p>
+          <div class="finger-arena" id="finger-arena">
+            <p class="finger-hint" id="finger-hint">Posez vos doigts ici 👆</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Roulette du conducteur</h2>
+          <p class="card-sub">Pas d'écran tactile sous la main ? La roulette désigne un conducteur au hasard dans le crew.</p>
+          <div class="driver-slot" id="driver-slot">—</div>
+          <div class="wheel-actions"><button class="btn-primary" id="driver-spin">Tirer au sort</button></div>
+        </article>
+      </section>
+
+      <!-- ===== Défis ===== -->
+      <section id="tab-defis" class="tab-panel">
+        <article class="card">
+          <h2 class="card-title">La roue du caribou</h2>
+          <p class="card-sub">Un tirage par jour : le caribou désigne qui fait le défi.</p>
+          <p class="card-sub defis-warn" id="defis-warn" hidden>Synchro des défis inactive : mets à jour les règles Firestore (voir README). En attendant, roue et défis restent sur cet appareil.</p>
+
+          <div class="wheel-wrap">
+            <div class="wheel-disc" id="wheel-disc"></div>
+            <div class="wheel-needle" id="wheel-needle">
+              <svg class="caribou-needle" viewBox="0 0 80 110" aria-hidden="true">
+                <g fill="none" stroke="#FBBF24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M31 34 C26 24 20 18 11 12"/>
+                  <path d="M25 24 C19 22 15 16 13 8"/>
+                  <path d="M20 17 C16 15 13 11 12 5"/>
+                  <path d="M49 34 C54 24 60 18 69 12"/>
+                  <path d="M55 24 C61 22 65 16 67 8"/>
+                  <path d="M60 17 C64 15 67 11 68 5"/>
+                </g>
+                <ellipse cx="24" cy="42" rx="7" ry="4.5" fill="#D8891A" transform="rotate(-30 24 42)"/>
+                <ellipse cx="56" cy="42" rx="7" ry="4.5" fill="#D8891A" transform="rotate(30 56 42)"/>
+                <ellipse cx="40" cy="52" rx="15" ry="19" fill="#F59E0B"/>
+                <circle cx="33" cy="47" r="2.6" fill="#0B1120"/>
+                <circle cx="47" cy="47" r="2.6" fill="#0B1120"/>
+                <ellipse cx="40" cy="64" rx="8" ry="6.5" fill="#B4700D"/>
+                <ellipse cx="40" cy="63" rx="3.2" ry="2.4" fill="#0B1120"/>
+              </svg>
+              <span class="needle-shaft" aria-hidden="true"></span>
+            </div>
+            <div class="wheel-hub" aria-hidden="true"></div>
+          </div>
+
+          <div class="wheel-actions">
+            <button class="btn-primary" id="spin-btn">Lancer la roue</button>
+          </div>
+          <div id="wheel-result" class="wheel-result"></div>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Les défis du crew</h2>
+          <p class="card-sub">Ajoute des idées : la roue en pioche un au hasard à chaque tirage.</p>
+          <form id="challenge-form" class="challenge-form">
+            <input type="text" id="challenge-input" placeholder="Ex : parler québécois pendant 1 heure" maxlength="120" required>
+            <button type="submit" class="btn-primary btn-sm">Ajouter</button>
+          </form>
+          <ul id="challenge-list" class="challenge-list"></ul>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Derniers tirages</h2>
+          <ul id="wheel-history" class="wheel-history"></ul>
+        </article>
+      </section>
+
+      <!-- ===== Réglages ===== -->
+      <section id="tab-reglages" class="tab-panel">
+        <article class="card">
+          <h2 class="card-title">Taux de change</h2>
+          <p class="card-sub">Utilisé pour convertir les dépenses saisies en euros.</p>
+          <label class="field field-inline">
+            <span class="field-label">1 € =</span>
+            <input type="number" id="rate-input" step="0.01" min="0.5" max="3" inputmode="decimal"> <span class="unit">$ CAD</span>
+          </label>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Synchronisation</h2>
+          <p class="card-sub" id="sync-status">Connexion à la base en cours…</p>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Export Excel</h2>
+          <p class="card-sub">Télécharge toutes les dépenses et remboursements dans un fichier <code>.xlsx</code>, avec une colonne qui indique ton impact perso sur chaque ligne.</p>
+          <button class="btn-ghost" id="export-xlsx-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+            Exporter en Excel
+          </button>
+        </article>
+
+        <article class="card card-danger">
+          <h2 class="card-title">Zone dangereuse</h2>
+          <p class="card-sub">Supprime toutes les dépenses du voyage. Irréversible.</p>
+          <button class="btn-danger" id="reset-btn">Tout effacer</button>
+        </article>
+
+        <p class="footer-note">Caribou · fait maison pour le crew · comptes &amp; mots de passe modifiables dans <code>js/config.js</code></p>
+      </section>
+    </main>
+
+    <button class="fab" id="fab-add" aria-label="Ajouter une dépense">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    </button>
+  </div>
+
+  <!-- ================= MODALE DÉPENSE ================= -->
+  <div class="modal-backdrop" id="expense-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h2 id="modal-title">Nouvelle dépense</h2>
+        <button class="icon-btn" id="modal-close" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <form id="expense-form">
+        <div class="seg seg-type" id="exp-type">
+          <button type="button" class="seg-btn active" data-type="expense">Dépense</button>
+          <button type="button" class="seg-btn" data-type="transfer">Remboursement</button>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Titre</span>
+          <input type="text" id="exp-title" placeholder="Poutine chez Ashton" required maxlength="60">
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Montant</span>
+            <input type="number" id="exp-amount" step="0.01" min="0.01" placeholder="42.50" required inputmode="decimal">
+          </label>
+          <label class="field field-currency">
+            <span class="field-label">Devise</span>
+            <div class="seg" id="exp-currency">
+              <button type="button" class="seg-btn active" data-cur="CAD">$ CAD</button>
+              <button type="button" class="seg-btn" data-cur="EUR">€ EUR</button>
+            </div>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label" id="exp-payer-label">Payé par</span>
+          <div class="payer-grid" id="exp-payer"></div>
+        </label>
+
+        <label class="field" id="field-participants">
+          <span class="field-label">Pour qui</span>
+          <div class="part-grid" id="exp-participants"></div>
+        </label>
+
+        <label class="field" id="field-beneficiary" hidden>
+          <span class="field-label">À qui</span>
+          <div class="part-grid" id="exp-beneficiary"></div>
+        </label>
+
+        <div class="field" id="field-debts" hidden>
+          <span class="field-label">Dépenses à rembourser</span>
+          <div class="debt-list" id="exp-debts"></div>
+          <p class="debt-hint" id="debt-hint"></p>
+        </div>
+
+        <label class="field" id="field-category">
+          <span class="field-label">Catégorie</span>
+          <div class="cat-grid" id="exp-category"></div>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Date</span>
+          <input type="date" id="exp-date" required>
+        </label>
+
+        <p class="login-error" id="exp-error" role="alert" hidden></p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-danger btn-sm" id="exp-delete" hidden>Supprimer</button>
+          <button type="submit" class="btn-primary" id="exp-save">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= MODALE DE CONFIRMATION ================= -->
+  <div class="modal-backdrop" id="confirm-modal" hidden>
+    <div class="modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <div class="confirm-icon" id="confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </div>
+      <h2 id="confirm-title">Confirmer</h2>
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button type="button" class="btn-ghost" id="confirm-cancel">Annuler</button>
+        <button type="button" class="btn-danger" id="confirm-ok">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/three@0.147.0/build/three.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.5/dist/pocketbase.umd.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="js/config.js" defer></script>
+  <script src="js/video-bg.js" defer></script>
+  <script src="js/bg3d.js" defer></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>

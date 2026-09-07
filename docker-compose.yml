@@ -1,0 +1,31 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caribou-caddy
+    restart: unless-stopped
+    dns:                                 # resolver hôte injoignable dans le conteneur
+      - 1.1.1.1
+      - 8.8.8.8
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./:/srv:ro                       # fichiers du site (ce dépôt)
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data                 # certificats Let's Encrypt
+      - caddy_config:/config
+    depends_on:
+      - pocketbase
+
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:0.22.21
+    container_name: caribou-pb
+    restart: unless-stopped
+    command: ["serve", "--http=0.0.0.0:8090"]
+    volumes:
+      - pb_data:/pb_data                 # base SQLite + fichiers (persistant, à sauvegarder)
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pb_data:
