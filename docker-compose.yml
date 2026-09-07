@@ -21,7 +21,8 @@ services:
     image: ghcr.io/muchobien/pocketbase:0.22.21
     container_name: caribou-pb
     restart: unless-stopped
-    command: ["serve", "--http=0.0.0.0:8090"]
+    # pas de `command:` : l'entrypoint de l'image lance déjà
+    # `serve --http=0.0.0.0:8090 --dir=/pb_data ...` (HTTP simple, Caddy gère le TLS)
     volumes:
       - pb_data:/pb_data                 # base SQLite + fichiers (persistant, à sauvegarder)
 
