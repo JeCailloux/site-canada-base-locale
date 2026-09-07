@@ -28,33 +28,14 @@ Caddy prend un certificat pour chaque sous-domaine. Ports 80/443 libres et ouver
 
 ## 3. PocketBase : admin + collections (une fois)
 
-1. Ouvre **https://bastien-db.duckdns.org/_/** → crée le compte admin.
-2. Crée **2 collections** (type *Base*) :
+Ouvre **https://bastien-db.duckdns.org/_/** → crée le compte admin.
 
-   **`expenses`** — champs :
-   | champ | type |
-   |---|---|
-   | title | Text |
-   | amount | Number |
-   | currency | Text |
-   | payerId | Text |
-   | participants | JSON |
-   | category | Text |
-   | date | Text |
-   | type | Text |
-   | createdBy | Text |
-   | createdAt | Text |
+Les collections `expenses` et `meta` (avec règles publiques) sont créées
+**automatiquement** au démarrage par la migration `pb_migrations/1700000000_init.js`.
+Rien à créer à la main.
 
-   **`meta`** — champs :
-   | champ | type |
-   |---|---|
-   | kind | Text |
-   | data | JSON |
-
-3. Pour **chaque** collection → onglet **API Rules** → **déverrouille** (icône cadenas)
-   les 5 règles (List, View, Create, Update, Delete) → laisse-les **vides** = public.
-   *(Même posture que les règles Firestore ouvertes d'avant. Le sous-domaine `bastien-db`
-   obscur fait office de barrière. Pour durcir un jour : règles + auth PocketBase.)*
+*(Règles ouvertes = même posture que les règles Firestore ouvertes d'avant ; le
+sous-domaine `bastien-db` obscur fait barrière. Pour durcir : règles + auth PocketBase.)*
 
 ## 4. Importer les anciennes données
 

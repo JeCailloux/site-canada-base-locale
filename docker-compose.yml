@@ -25,6 +25,7 @@ services:
     # `serve --http=0.0.0.0:8090 --dir=/pb_data ...` (HTTP simple, Caddy gère le TLS)
     volumes:
       - pb_data:/pb_data                 # base SQLite + fichiers (persistant, à sauvegarder)
+      - ./pb_migrations:/pb_migrations    # crée les collections auto au démarrage
 
 volumes:
   caddy_data:
