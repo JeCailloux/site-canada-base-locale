@@ -4,8 +4,8 @@ bastien-site.duckdns.org {
 	file_server
 	encode gzip
 
-	# ne pas exposer les fichiers internes
-	@hidden path /.git* /Caddyfile /docker-compose.yml /README.md /import.html /caribou-dump.json
+	# ne pas exposer les fichiers internes (import.html reste accessible pour l'import ponctuel)
+	@hidden path /.git* /Caddyfile /docker-compose.yml /README.md /caribou-dump.json
 	respond @hidden 404
 }
 
