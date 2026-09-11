@@ -112,6 +112,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3 4v14l6 2.5m0-14 6 2.5m-6-2.5v14m6-11.5 6-2.5v14l-6 2.5m0-14v14m0-14-6-2.5"/></svg>
         <span>Voyage</span>
       </button>
+      <button class="tab" data-tab="planning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+        <span>Planning</span>
+      </button>
       <button class="tab" data-tab="conduite">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 9.5V3M9.9 13.7 5 18M14.1 13.7 19 18"/></svg>
         <span>Conduite</span>
@@ -283,6 +287,45 @@
           <p class="card-sub">Pas d'écran tactile sous la main ? La roulette désigne un conducteur au hasard dans le crew.</p>
           <div class="driver-slot" id="driver-slot">—</div>
           <div class="wheel-actions"><button class="btn-primary" id="driver-spin">Tirer au sort</button></div>
+        </article>
+      </section>
+
+      <!-- ===== Planning ===== -->
+      <section id="tab-planning" class="tab-panel">
+        <article class="card">
+          <div class="plan-toolbar">
+            <div class="seg plan-view" id="plan-view">
+              <button type="button" class="seg-btn active" data-view="week">Semaine</button>
+              <button type="button" class="seg-btn" data-view="month">Mois</button>
+            </div>
+            <div class="plan-nav">
+              <button type="button" class="icon-btn" id="plan-prev" aria-label="Précédent">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button type="button" class="btn-ghost btn-xs" id="plan-today">Aujourd'hui</button>
+              <button type="button" class="icon-btn" id="plan-next" aria-label="Suivant">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+          <h2 class="card-title plan-title" id="plan-title"></h2>
+          <div id="plan-body"></div>
+          <p class="plan-free" id="plan-free"></p>
+          <div class="plan-legend">
+            <span><i class="plan-sw sw-cours"></i>Cours</span>
+            <span><i class="plan-sw sw-trip"></i>Voyage</span>
+            <span><i class="plan-sw sw-away"></i>Absent</span>
+            <span><i class="plan-sw sw-free"></i>Dispo</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <h2 class="card-title">Qui va où</h2>
+            <button type="button" class="btn-primary btn-sm" id="plan-add">Ajouter</button>
+          </div>
+          <p class="card-sub">Les périodes en cours et à venir. Touche une période pour la modifier.</p>
+          <ul id="plan-list" class="plan-list"></ul>
         </article>
       </section>
 
@@ -467,6 +510,52 @@
     </div>
   </div>
 
+  <!-- ================= MODALE PLANNING ================= -->
+  <div class="modal-backdrop" id="plan-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="plan-modal-title">
+      <div class="modal-head">
+        <h2 id="plan-modal-title">Nouvelle période</h2>
+        <button class="icon-btn" id="plan-modal-close" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <form id="plan-form">
+        <div class="seg seg-type" id="plan-type">
+          <button type="button" class="seg-btn active" data-type="trip">Voyage</button>
+          <button type="button" class="seg-btn" data-type="away">Absent</button>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Qui</span>
+          <div class="part-grid" id="plan-who"></div>
+        </div>
+
+        <label class="field">
+          <span class="field-label" id="plan-place-label">Où</span>
+          <input type="text" id="plan-place" placeholder="Calgary" maxlength="40">
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Du</span>
+            <input type="date" id="plan-from" required>
+          </label>
+          <label class="field">
+            <span class="field-label">Au</span>
+            <input type="date" id="plan-to" required>
+          </label>
+        </div>
+
+        <p class="login-error" id="plan-error" role="alert" hidden></p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-danger btn-sm" id="plan-delete" hidden>Supprimer</button>
+          <button type="submit" class="btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ================= MODALE DE CONFIRMATION ================= -->
   <div class="modal-backdrop" id="confirm-modal" hidden>
     <div class="modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
@@ -491,6 +580,7 @@
   <script src="js/config.js" defer></script>
   <script src="js/video-bg.js" defer></script>
   <script src="js/bg3d.js" defer></script>
+  <script src="js/planning.js" defer></script>
   <script src="js/app.js" defer></script>
 </body>
 </html>

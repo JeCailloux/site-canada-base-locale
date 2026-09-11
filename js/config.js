@@ -23,6 +23,11 @@ window.CARIBOU_CONFIG = {
   // Poids de chaque compte dans le tirage quotidien (total libre).
   wheelWeights: { bastien: 20, leo: 20, simon: 40, axel: 20 },
 
+  // ---- PLANNING ----
+  // Jours de cours (en rose) : 0 = dimanche, 1 = lundi … 3 = mercredi, 4 = jeudi.
+  // coursFrom / coursTo : dates de la session (AAAA-MM-JJ), null = toutes les semaines.
+  planning: { coursDays: [3, 4], coursFrom: null, coursTo: null },
+
   // ---- SYNCHRO (PocketBase, base locale auto-hébergée) ----
   // URL publique de PocketBase (via Caddy). Sur le VPS : bastien-db.duckdns.org.
   // En local (test) : "http://127.0.0.1:8090".

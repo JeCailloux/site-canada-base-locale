@@ -57,6 +57,15 @@ Tout se personnalise dans [`js/config.js`](js/config.js) : comptes, mots de pass
 couleurs, nom du voyage, poids de la roue, et **`pbUrl`** (l'URL PocketBase).
 `pbUrl: null` = mode 100% local (sans synchro).
 
+## Planning
+
+Onglet **Planning** : qui va où, en vue semaine (une ligne par personne) ou mois.
+On ajoute des périodes (Voyage ou Absent, qui, où, du… au…) ; les cases vides = dispo.
+Mercredi et jeudi en rose = jours de cours, réglables dans `js/config.js` (`planning`).
+Les périodes vivent dans la table `meta` (`kind` = `plan`).
+
+Vérif des calculs de dates : `node tests/planning.test.js`
+
 ## Mr. White
 
 Onglet **Mr. White** → [`mrwhite.html`](mrwhite.html) : jeu Undercover, sur un seul téléphone

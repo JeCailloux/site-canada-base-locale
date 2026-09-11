@@ -231,8 +231,8 @@ body:not(.in-app) #bg3d { display: none; }
 }
 
 /* ---------- Champs ---------- */
+[hidden] { display: none !important; } /* sinon .btn-danger & co (display: inline-flex) restent visibles */
 .field { display: block; margin-bottom: 16px; }
-.field[hidden] { display: none; }
 .field-label {
   display: block;
   font-size: 0.82rem;
@@ -1425,6 +1425,122 @@ input[type="date"] { color-scheme: dark; }
     transition-duration: 0.01ms !important;
   }
   .reveal { opacity: 1; transform: none; }
+}
+
+/* ============================================================
+   PLANNING (qui va où)
+   ============================================================ */
+:root {
+  --cours:      #F472B6;
+  --cours-soft: rgba(244, 114, 182, 0.13);
+  --away:       #94A3B8;
+}
+.plan-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.plan-view { min-height: 42px; flex: 0 1 210px; }
+.plan-nav { display: flex; align-items: center; gap: 4px; }
+.plan-title { text-transform: none; }
+
+/* Semaine : une ligne par personne, une colonne par jour */
+.plan-week {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  align-items: stretch;
+}
+.pw-day {
+  display: flex; flex-direction: column; align-items: center;
+  font-size: 0.78rem; font-weight: 800; color: var(--text); line-height: 1.2;
+  padding: 6px 0; border-radius: 9px;
+}
+.pw-day b { font-size: 0.68rem; font-weight: 700; color: var(--text-dim); text-transform: capitalize; }
+.pw-day.is-cours { background: var(--cours-soft); color: var(--cours); }
+.pw-day.is-cours b { color: var(--cours); }
+.pw-day.is-today { box-shadow: inset 0 0 0 1.5px var(--gold); }
+.pw-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.86rem; min-width: 0; }
+.pw-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-name .mini-dot, .plan-dots .mini-dot {
+  width: 26px; height: 26px; flex: none; font-size: 0.66rem;
+  display: grid; place-items: center; border-radius: 50%;
+  font-weight: 800; color: #0B1120; font-family: var(--font-display);
+}
+.pw-cell {
+  appearance: none; border: none; cursor: pointer; min-height: 44px; min-width: 0;
+  border-radius: 9px; font-family: var(--font-body);
+  transition: filter 0.2s, background 0.2s;
+}
+.pw-free { background: rgba(255, 255, 255, 0.035); border: 1px dashed transparent; }
+.pw-free.is-cours { background: var(--cours-soft); }
+.pw-free:hover { border-color: var(--border-strong); }
+.pw-plan {
+  font-size: 0.74rem; font-weight: 800; padding: 4px 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pw-plan:hover { filter: brightness(1.12); }
+.type-trip { background: rgba(56, 189, 248, 0.2); color: #7DD3FC; box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45); }
+.type-away { background: rgba(148, 163, 184, 0.16); color: #CBD5E1; box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35); }
+
+.plan-free { margin: 14px 0 0; color: var(--text-dim); font-size: 0.9rem; }
+.plan-free strong { color: var(--aurora); }
+.plan-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 0.78rem; color: var(--text-dim); font-weight: 600; }
+.plan-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.plan-sw { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.sw-cours { background: var(--cours); }
+.sw-trip { background: var(--ice); }
+.sw-away { background: var(--away); }
+.sw-free { background: rgba(255, 255, 255, 0.12); }
+
+/* Mois : calendrier classique */
+.plan-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.pm-head { text-align: center; font-size: 0.72rem; font-weight: 800; color: var(--text-dim); text-transform: capitalize; padding: 4px 0; }
+.pm-head.is-cours { color: var(--cours); }
+.pm-day {
+  appearance: none; border: 1px solid var(--border); cursor: pointer;
+  background: rgba(255, 255, 255, 0.03); color: var(--text); font-family: var(--font-body);
+  border-radius: 10px; min-height: 74px; padding: 5px; min-width: 0;
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: left;
+  transition: border-color 0.2s;
+}
+.pm-day:hover { border-color: var(--border-strong); }
+.pm-day.is-cours { background: var(--cours-soft); border-color: rgba(244, 114, 182, 0.28); }
+.pm-day.is-out { opacity: 0.38; }
+.pm-day.is-today { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.pm-num { font-size: 0.78rem; font-weight: 800; }
+.pm-day.is-cours .pm-num { color: var(--cours); }
+.pm-chip {
+  display: flex; align-items: center; gap: 2px; min-width: 0;
+  border-radius: 6px; padding: 2px 3px; font-size: 0.66rem; font-weight: 700;
+}
+.pm-chip i {
+  font-style: normal; width: 14px; height: 14px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0.55rem; font-weight: 800; color: #0B1120;
+}
+.pm-chip em { font-style: normal; margin-left: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Liste des périodes */
+.plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plan-item {
+  appearance: none; width: 100%; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 10px 12px; color: var(--text); font-family: var(--font-body);
+  transition: border-color 0.2s, background 0.2s;
+}
+.plan-item:hover { border-color: var(--border-strong); background: rgba(255, 255, 255, 0.06); }
+.plan-dots { display: flex; flex: none; }
+.plan-dots .mini-dot + .mini-dot { margin-left: -8px; box-shadow: 0 0 0 2px var(--surface-solid); }
+.plan-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.plan-item-main strong { font-size: 0.95rem; }
+.plan-item-main span { color: var(--text-dim); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-badge { flex: none; font-size: 0.7rem; font-weight: 800; border-radius: 100px; padding: 3px 10px; }
+
+@media (max-width: 640px) {
+  .plan-week { grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .pw-name span:last-child { display: none; }
+  .pw-plan { font-size: 0.64rem; padding: 3px; }
+  .pm-day { min-height: 62px; padding: 4px 3px; }
+  .pm-chip { padding: 2px; }
+  .pm-chip em { display: none; }
+  .pm-chip i { width: 12px; height: 12px; }
 }
 
 /* ============================================================

@@ -156,7 +156,7 @@
     if (!confirmResolve) return;
     $("#confirm-modal").hidden = true;
     // ne pas rendre le scroll si la modale de dépense est encore ouverte dessous
-    document.body.style.overflow = $("#expense-modal").hidden ? "" : "hidden";
+    document.body.style.overflow = $("#expense-modal").hidden && $("#plan-modal").hidden ? "" : "hidden";
     var r = confirmResolve;
     confirmResolve = null;
     r(result);
@@ -191,6 +191,7 @@
     if (!raw.wheel || typeof raw.wheel !== "object") raw.wheel = {};
     if (!Array.isArray(raw.cities)) raw.cities = [];
     if (!Array.isArray(raw.hikes)) raw.hikes = [];
+    if (!Array.isArray(raw.plans)) raw.plans = [];
     state.data = raw;
   }
 
@@ -243,10 +244,11 @@
 
     cloud.refetchMeta = function () {
       return pb.collection("meta").getFullList({ sort: "created" }).then(function (recs) {
-        var chals = [], cities = [], hikes = [], wheel = {};
+        var chals = [], cities = [], hikes = [], wheel = {}, plans = [];
         recs.forEach(function (r) {
           var d = r.data || {};
           if (r.kind === "challenge") chals.push({ id: r.id, text: d.text, createdBy: d.createdBy, createdAt: d.createdAt });
+          else if (r.kind === "plan") plans.push(planFields(d, r.id));
           else if (r.kind === "city") cities.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "hike") hikes.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "wheel" && d.date) wheel[d.date] = d;
@@ -264,6 +266,7 @@
         state.data.cities = cities;
         state.data.hikes = hikes;
         state.data.wheel = wheel;
+        state.data.plans = plans;
         saveData();
         if (state.user) renderAll();
       }).catch(function () { updateSyncBadge(false); });
@@ -314,6 +317,14 @@
         ? pb.collection("meta").update(cloud.settingId, { data: data })
         : pb.collection("meta").create({ kind: "setting", data: data });
       return op.then(cloud.refetchMeta).catch(function () {});
+    };
+    cloud.savePlan = function (p, editing) {
+      var data = planFields(p);
+      delete data.id;
+      var op = editing
+        ? pb.collection("meta").update(p.id, { data: data })
+        : pb.collection("meta").create({ kind: "plan", data: data });
+      return op.then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
     };
 
     // --- temps réel ---
@@ -492,6 +503,7 @@
     renderStatsTab();
     renderDefis();
     renderAgency();
+    renderPlanning();
   }
 
   function renderStats() {
@@ -1311,6 +1323,245 @@
     }).join("");
   }
 
+  /* ================= Planning (qui va où) ================= */
+
+  var PL = window.CaribouPlanning;
+  var PLAN_CFG = CFG.planning || {};
+  var fmtDayShort = new Intl.DateTimeFormat("fr-FR", { weekday: "short" });
+  var fmtDM = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
+  var fmtMonth = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" });
+  var plan = { view: "week", date: null, editing: null, type: "trip", who: [] };
+
+  function planFields(d, id) {
+    return {
+      id: id || d.id, who: (d.who || []).slice(), type: d.type === "away" ? "away" : "trip",
+      place: d.place || "", from: d.from, to: d.to, createdBy: d.createdBy, createdAt: d.createdAt
+    };
+  }
+
+  function planLabel(p) { return p.place || (p.type === "away" ? "Absent" : "Voyage"); }
+  function dm(d) { return fmtDM.format(PL.parse(d)); }
+  function planRange(p) { return p.from === p.to ? dm(p.from) : dm(p.from) + " → " + dm(p.to); }
+  function findPlan(id) { return state.data.plans.filter(function (x) { return x.id === id; })[0]; }
+
+  function renderPlanning() {
+    var body = $("#plan-body");
+    if (!body || !PL) return;
+    if (!plan.date) plan.date = todayISO();
+    $all("#plan-view .seg-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.view === plan.view); });
+    if (plan.view === "week") renderPlanWeek(body); else renderPlanMonth(body);
+    renderPlanList();
+  }
+
+  function renderPlanWeek(body) {
+    var days = PL.weekDays(plan.date), today = todayISO(), plans = state.data.plans;
+    $("#plan-title").textContent = "Semaine du " + dm(days[0]) + " au " + dm(days[6]);
+
+    var html = '<div class="plan-week"><span class="pw-corner"></span>';
+    days.forEach(function (d) {
+      html += '<span class="pw-day' + (PL.isCours(d, PLAN_CFG) ? " is-cours" : "") + (d === today ? " is-today" : "") + '">' +
+        "<b>" + esc(fmtDayShort.format(PL.parse(d)).replace(".", "")) + "</b>" + PL.parse(d).getDate() + "</span>";
+    });
+    CFG.accounts.forEach(function (acc) {
+      html += '<span class="pw-name">' + avatarDot(acc, "mini-dot") + "<span>" + esc(acc.name) + "</span></span>";
+      for (var i = 0; i < 7;) {
+        var p = PL.whereIs(plans, acc.id, days[i]), n = 1;
+        if (p) {
+          while (i + n < 7 && PL.whereIs(plans, acc.id, days[i + n]) === p) n++; // jours consécutifs = un seul bloc
+          html += '<button type="button" class="pw-cell pw-plan type-' + p.type + '" style="grid-column: span ' + n + '" data-plan="' + esc(p.id) + '" title="' +
+            esc(acc.name + " · " + planLabel(p) + " · " + planRange(p)) + '">' + esc(planLabel(p)) + "</button>";
+        } else {
+          html += '<button type="button" class="pw-cell pw-free' + (PL.isCours(days[i], PLAN_CFG) ? " is-cours" : "") +
+            '" data-add="' + esc(acc.id + "|" + days[i]) + '" aria-label="' + esc(acc.name + " dispo le " + dm(days[i]) + ", ajouter une période") + '"></button>';
+        }
+        i += n;
+      }
+    });
+    body.innerHTML = html + "</div>";
+
+    var free = PL.freeOn(plans, CFG.accounts.map(function (a) { return a.id; }), days).map(function (id) { return member(id).name; });
+    $("#plan-free").innerHTML = free.length
+      ? "Dispo toute la semaine : <strong>" + esc(free.join(", ")) + "</strong>"
+      : "Personne n'est dispo toute la semaine.";
+  }
+
+  function renderPlanMonth(body) {
+    var month = plan.date.slice(0, 7), weeks = PL.monthWeeks(plan.date), today = todayISO(), plans = state.data.plans;
+    var title = fmtMonth.format(PL.parse(month + "-01"));
+    $("#plan-title").textContent = title.charAt(0).toUpperCase() + title.slice(1);
+
+    var coursDays = PLAN_CFG.coursDays || [3, 4];
+    var html = '<div class="plan-month">';
+    weeks[0].forEach(function (d) {
+      html += '<span class="pm-head' + (coursDays.indexOf(PL.weekday(d)) >= 0 ? " is-cours" : "") + '">' +
+        esc(fmtDayShort.format(PL.parse(d)).replace(".", "")) + "</span>";
+    });
+    weeks.forEach(function (w) {
+      w.forEach(function (d) {
+        var chips = PL.onDay(plans, d).map(function (p) {
+          return '<span class="pm-chip type-' + p.type + '">' + p.who.map(function (id) {
+            var m = member(id);
+            return '<i style="background:' + m.color + '">' + esc(initials(m.name).charAt(0)) + "</i>";
+          }).join("") + "<em>" + esc(planLabel(p)) + "</em></span>";
+        }).join("");
+        html += '<button type="button" class="pm-day' + (d.slice(0, 7) !== month ? " is-out" : "") +
+          (PL.isCours(d, PLAN_CFG) ? " is-cours" : "") + (d === today ? " is-today" : "") + '" data-day="' + d + '">' +
+          '<span class="pm-num">' + PL.parse(d).getDate() + "</span>" + chips + "</button>";
+      });
+    });
+    body.innerHTML = html + "</div>";
+    $("#plan-free").textContent = "Touche un jour pour voir le détail de sa semaine.";
+  }
+
+  function renderPlanList() {
+    var list = $("#plan-list");
+    var today = todayISO();
+    var items = state.data.plans.filter(function (p) { return p.to >= today; })
+      .sort(function (a, b) { return a.from.localeCompare(b.from); });
+    if (!items.length) {
+      list.innerHTML = '<li class="empty-state">Rien de prévu pour l\'instant. Ajoute le premier voyage !</li>';
+      return;
+    }
+    list.innerHTML = items.map(function (p) {
+      return '<li><button type="button" class="plan-item" data-plan="' + esc(p.id) + '">' +
+        '<span class="plan-dots">' + p.who.map(function (id) { return avatarDot(member(id), "mini-dot"); }).join("") + "</span>" +
+        '<span class="plan-item-main"><strong>' + esc(planLabel(p)) + "</strong><span>" +
+          esc(p.who.map(function (id) { return member(id).name; }).join(", ") + " · " + planRange(p)) + "</span></span>" +
+        '<span class="plan-badge type-' + p.type + '">' + (p.type === "away" ? "Absent" : "Voyage") + "</span></button></li>";
+    }).join("");
+  }
+
+  function openPlanModal(p, preset) {
+    preset = preset || {};
+    plan.editing = p ? p.id : null;
+    plan.type = p ? p.type : "trip";
+    plan.who = p ? p.who.slice() : [preset.who || state.user.id];
+    $("#plan-modal-title").textContent = p ? "Modifier la période" : "Nouvelle période";
+    $("#plan-place").value = p ? p.place : "";
+    $("#plan-from").value = p ? p.from : preset.day || todayISO();
+    $("#plan-to").value = p ? p.to : preset.day || todayISO();
+    $("#plan-delete").hidden = !p;
+    $("#plan-error").hidden = true;
+    syncPlanModal();
+    $("#plan-modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function syncPlanModal() {
+    var away = plan.type === "away";
+    $all("#plan-type .seg-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.type === plan.type); });
+    $all("#plan-who .chip-btn").forEach(function (b) { b.classList.toggle("selected", plan.who.indexOf(b.dataset.id) >= 0); });
+    $("#plan-place-label").textContent = away ? "Raison (facultatif)" : "Où";
+    $("#plan-place").placeholder = away ? "Famille, boulot…" : "Calgary";
+  }
+
+  function closePlanModal() {
+    $("#plan-modal").hidden = true;
+    document.body.style.overflow = "";
+    plan.editing = null;
+  }
+
+  function submitPlan(e) {
+    e.preventDefault();
+    var from = $("#plan-from").value, to = $("#plan-to").value;
+    var err = !plan.who.length ? "Choisis au moins une personne."
+      : !from || !to ? "Indique les dates."
+      : to < from ? "La date de fin est avant le début." : null;
+    if (err) {
+      $("#plan-error").textContent = err;
+      $("#plan-error").hidden = false;
+      return;
+    }
+    var existing = plan.editing ? findPlan(plan.editing) : null;
+    var p = planFields({
+      who: CFG.accounts.map(function (a) { return a.id; }).filter(function (id) { return plan.who.indexOf(id) >= 0; }),
+      type: plan.type, place: $("#plan-place").value.trim(), from: from, to: to,
+      createdBy: existing ? existing.createdBy : state.user.id,
+      createdAt: existing ? existing.createdAt : new Date().toISOString()
+    }, existing ? existing.id : uid());
+    if (cloud) {
+      cloud.savePlan(p, !!existing);
+    } else {
+      state.data.plans = state.data.plans.filter(function (x) { return x.id !== p.id; }).concat([p]);
+      saveData();
+    }
+    plan.date = from; // on affiche la période qu'on vient d'enregistrer
+    closePlanModal();
+    renderPlanning();
+    toast(existing ? "Période modifiée" : "Période ajoutée");
+  }
+
+  function deletePlan() {
+    var id = plan.editing;
+    askConfirm({ title: "Supprimer cette période ?", message: "Elle disparaîtra du planning de tout le monde.", confirmLabel: "Supprimer" })
+      .then(function (ok) {
+        if (!ok) return;
+        if (cloud) {
+          cloud.delMeta(id);
+        } else {
+          state.data.plans = state.data.plans.filter(function (x) { return x.id !== id; });
+          saveData();
+          renderPlanning();
+        }
+        closePlanModal();
+        toast("Période supprimée");
+      });
+  }
+
+  function bindPlanning() {
+    var box = $("#plan-who");
+    CFG.accounts.forEach(function (acc) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip-btn";
+      b.dataset.id = acc.id;
+      b.style.setProperty("--av-color", acc.color);
+      b.innerHTML = '<span class="mini-dot" style="background:' + acc.color + '">' + esc(initials(acc.name)) + "</span>" + esc(acc.name);
+      b.addEventListener("click", function () {
+        var i = plan.who.indexOf(acc.id);
+        if (i >= 0) plan.who.splice(i, 1); else plan.who.push(acc.id);
+        syncPlanModal();
+      });
+      box.appendChild(b);
+    });
+    $all("#plan-type .seg-btn").forEach(function (b) {
+      b.addEventListener("click", function () { plan.type = b.dataset.type; syncPlanModal(); });
+    });
+    $all("#plan-view .seg-btn").forEach(function (b) {
+      b.addEventListener("click", function () { plan.view = b.dataset.view; renderPlanning(); });
+    });
+    function move(dir) {
+      plan.date = plan.view === "week" ? PL.addDays(plan.date, 7 * dir) : PL.addMonths(plan.date, dir);
+      renderPlanning();
+    }
+    $("#plan-prev").addEventListener("click", function () { move(-1); });
+    $("#plan-next").addEventListener("click", function () { move(1); });
+    $("#plan-today").addEventListener("click", function () { plan.date = todayISO(); renderPlanning(); });
+    $("#plan-add").addEventListener("click", function () { openPlanModal(null); });
+    $("#plan-modal-close").addEventListener("click", closePlanModal);
+    $("#plan-modal").addEventListener("click", function (e) { if (e.target === $("#plan-modal")) closePlanModal(); });
+    $("#plan-form").addEventListener("submit", submitPlan);
+    $("#plan-delete").addEventListener("click", deletePlan);
+
+    function onPlanClick(e) {
+      var t = e.target.closest("[data-plan], [data-add], [data-day]");
+      if (!t) return;
+      if (t.dataset.plan) {
+        var p = findPlan(t.dataset.plan);
+        if (p) openPlanModal(p);
+      } else if (t.dataset.add) {
+        var a = t.dataset.add.split("|");
+        openPlanModal(null, { who: a[0], day: a[1] });
+      } else {
+        plan.view = "week";
+        plan.date = t.dataset.day;
+        renderPlanning();
+      }
+    }
+    $("#plan-body").addEventListener("click", onPlanClick);
+    $("#plan-list").addEventListener("click", onPlanClick);
+  }
+
   /* ================= Agence de voyage ================= */
 
   function wishAdd(kind, name) {
@@ -1606,6 +1857,7 @@
       if (e.key !== "Escape") return;
       if (!$("#confirm-modal").hidden) closeConfirm(false);
       else if (!$("#expense-modal").hidden) closeModal();
+      else if (!$("#plan-modal").hidden) closePlanModal();
     });
     $("#expense-form").addEventListener("submit", submitExpense);
     $("#exp-delete").addEventListener("click", deleteExpense);
@@ -1691,6 +1943,8 @@
     });
 
     // Agence de voyage
+    bindPlanning();
+
     $("#city-form").addEventListener("submit", function (e) {
       e.preventDefault();
       var v = $("#city-input").value.trim();
