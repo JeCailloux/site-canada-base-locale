@@ -395,6 +395,16 @@
         "<p>Chaque tour : un indice chacun (pas de répétition), débat, vote à l'oral, puis on indique ici qui est éliminé.</p></details>");
   }
 
+  // QR du lien de la partie (librairie qrcode-generator ; si elle n'a pas chargé, pas de QR)
+  function qrBlock(link) {
+    if (typeof qrcode === "undefined") return "";
+    var qr = qrcode(0, "M");
+    qr.addData(link);
+    qr.make();
+    return '<div class="mw-qr">' + qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true, alt: "QR code pour rejoindre la partie" }) + "</div>" +
+      '<p class="mw-qr-hint">Scanne pour rejoindre directement</p>';
+  }
+
   function codeFromUrl() {
     var m = location.search.match(/[?&]code=([A-Za-z]{4})/);
     return m ? m[1].toUpperCase() : "";
@@ -438,6 +448,7 @@
     var link = location.origin + location.pathname + "?code=" + g.code;
     root.innerHTML = card("Salle d'attente", null,
       '<p class="mw-code-label">Code de la partie</p><p class="mw-code">' + esc(g.code) + "</p>" +
+      qrBlock(link) +
       '<p class="mw-link">Ou envoie le lien : <a href="' + esc(link) + '">' + esc(link) + "</a></p>" +
       '<ul class="mw-players">' + g.players.map(function (p) {
         return "<li><span>" + esc(p.name) + (p.pid === g.host ? ' <em class="mw-tag">hôte</em>' : "") +
@@ -606,13 +617,24 @@
     loadUsed().then(function () { var c = document.getElementById("mw-used-count"); if (c) c.textContent = used.length; })
       .catch(function () {});
     var savedId = lsGet(LS_GAME);
+    var urlCode = codeFromUrl();
     if (!g && pb && savedId) {
       pb.collection("meta").getOne(savedId).then(function (rec) {
+        if (urlCode && rec.data.code !== urlCode) { lsSet(LS_GAME, null); autoJoin(urlCode); return; } // nouveau QR scanné
         g = rec.data;
         watchGame(rec.id);
         render();
-      }).catch(function () { lsSet(LS_GAME, null); });
-    }
+      }).catch(function () { lsSet(LS_GAME, null); autoJoin(urlCode); });
+    } else autoJoin(urlCode);
+  }
+
+  // Arrivé par le lien / QR : on rejoint direct si on connaît déjà le prénom
+  function autoJoin(code) {
+    if (g || !pb || !code) return;
+    if (me.name) { joinMulti(code); return; }
+    var n = $("#mw-name");
+    if (n) n.focus();
+    toast("Entre ton prénom puis appuie sur Rejoindre");
   }
 
   boot();
