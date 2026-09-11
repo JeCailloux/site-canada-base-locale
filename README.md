@@ -57,6 +57,16 @@ Tout se personnalise dans [`js/config.js`](js/config.js) : comptes, mots de pass
 couleurs, nom du voyage, poids de la roue, et **`pbUrl`** (l'URL PocketBase).
 `pbUrl: null` = mode 100% local (sans synchro).
 
+## Mr. White
+
+Onglet **Mr. White** → [`mrwhite.html`](mrwhite.html) : jeu Undercover, sur un seul téléphone
+ou chacun le sien (code à 4 lettres, les invités sans compte peuvent rejoindre).
+Les parties et les paires déjà jouées vivent dans la table `meta`
+(`kind` = `mrwhite-game` / `mrwhite-used`). Les 2 000+ paires sont dans
+[`js/mrwhite-mots.js`](js/mrwhite-mots.js), une par ligne, modifiables à la main.
+
+Vérif logique + mots : `node tests/mrwhite.test.js`
+
 ## Sauvegarde
 
 La base vit dans le volume Docker `pb_data`. Backup :

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0B1120">
+  <title>Mr. White — Caribou</title>
+  <meta name="description" content="Mr. White (Undercover) : le jeu d'indices et de bluff du crew.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🕵️%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="bg3d" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="view-app mw-app">
+    <header class="topbar">
+      <a class="topbar-brand mw-back" href="index.html" title="Retour à Caribou">
+        <svg class="leaf small" viewBox="-110 -110 220 220" aria-hidden="true">
+          <path d="m 0,-100 14,27 c 2,4 5,5 9,3 l 22,-11 -12,61 c -1,6 3,8 7,4 l 12,-14 8,19 c 2,4 5,4 8,3 l 21,-5 -7,25 c -1,4 0,7 4,8 l 8,3 -49,41 c -3,3 -4,6 -3,10 l 4,13 -38,-7 c -5,-1 -8,2 -8,6 l 2,41 -12,0 2,-41 c 0,-4 -3,-7 -8,-6 l -38,7 4,-13 c 1,-4 0,-7 -3,-10 l -49,-41 8,-3 c 4,-1 5,-4 4,-8 l -7,-25 21,5 c 3,1 6,1 8,-3 l 8,-19 12,14 c 4,4 8,2 7,-4 l -12,-61 22,11 c 4,2 7,1 9,-3 z"/>
+        </svg>
+        <span class="brand-name">CARIBOU</span>
+        <span class="trip-chip">Mr. White</span>
+      </a>
+    </header>
+
+    <main class="content" id="mw-root"></main>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/three@0.147.0/build/three.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.5/dist/pocketbase.umd.js" defer></script>
+  <script src="js/config.js" defer></script>
+  <script src="js/bg3d.js" defer></script>
+  <script src="js/mrwhite-mots.js" defer></script>
+  <script src="js/mrwhite.js" defer></script>
+</body>
+</html>
