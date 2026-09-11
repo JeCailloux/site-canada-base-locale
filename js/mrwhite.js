@@ -134,6 +134,8 @@
   var LS_USED = "mrwhite_used";       // secours si pas de base
 
   var root = document.getElementById("mw-root");
+  var EMBED = !!document.getElementById("tab-mrwhite"); // dans l'onglet de Caribou (sinon page invités)
+  var urlCode = codeFromUrl();                           // arrivé par le lien / QR
   var pb = null;
   var g = null;          // partie affichée
   var gameId = null;     // id PocketBase (mode multi)
@@ -372,6 +374,7 @@
   }
 
   function renderHome() {
+    me = identity(); // on a pu se connecter à Caribou entre-temps
     var noPb = !pb;
     root.innerHTML =
       card("Mr. White", "Civils, Undercovers et Mr. White : donnez un indice, votez, démasquez les imposteurs.",
@@ -381,7 +384,7 @@
         "</div>" +
         '<label class="field mw-name-field"><span class="field-label">Ton prénom (mode chacun son téléphone)</span>' +
           '<input type="text" id="mw-name" maxlength="20" value="' + esc(me.name) + '" placeholder="Prénom"></label>' +
-        '<div class="mw-join"><input type="text" id="mw-code" maxlength="4" placeholder="CODE" autocapitalize="characters" value="' + esc(codeFromUrl()) + '">' +
+        '<div class="mw-join"><input type="text" id="mw-code" maxlength="4" placeholder="CODE" autocapitalize="characters" value="' + esc(urlCode) + '">' +
           '<button class="btn-ghost" data-act="join"' + (noPb ? " disabled" : "") + ">Rejoindre</button></div>") +
       card("Paires de mots", null,
         '<p class="mw-used"><strong id="mw-used-count">' + used.length + "</strong> / " + PAIRS.length +
@@ -445,7 +448,7 @@
 
   function renderLobby() {
     var host = isHost();
-    var link = location.origin + location.pathname + "?code=" + g.code;
+    var link = new URL("mrwhite.html?code=" + g.code, location.href).href; // page invités, qui renvoie le crew dans l'app
     root.innerHTML = card("Salle d'attente", null,
       '<p class="mw-code-label">Code de la partie</p><p class="mw-code">' + esc(g.code) + "</p>" +
       qrBlock(link) +
@@ -611,13 +614,22 @@
   /* ---------- Démarrage ---------- */
 
   function boot() {
+    // page invités ouverte par quelqu'un du crew : on le renvoie dans l'app (avec la barre d'onglets)
+    if (!EMBED && me.crew) { location.replace("index.html" + location.search); return; }
+    if (EMBED) {
+      var tab = document.querySelector('.tab[data-tab="mrwhite"]');
+      if (tab) tab.addEventListener("click", function () { if (!g) render(); });
+      if (urlCode) {
+        history.replaceState(null, "", location.pathname); // le code ne rouvre pas l'onglet à chaque rechargement
+        if (tab) { tab.click(); tab.scrollIntoView({ inline: "center", block: "nearest" }); }
+      }
+    }
     initPb();
     try { g = JSON.parse(lsGet(LS_SOLO)); } catch (e) { g = null; }
     render();
     loadUsed().then(function () { var c = document.getElementById("mw-used-count"); if (c) c.textContent = used.length; })
       .catch(function () {});
     var savedId = lsGet(LS_GAME);
-    var urlCode = codeFromUrl();
     if (!g && pb && savedId) {
       pb.collection("meta").getOne(savedId).then(function (rec) {
         if (urlCode && rec.data.code !== urlCode) { lsSet(LS_GAME, null); autoJoin(urlCode); return; } // nouveau QR scanné

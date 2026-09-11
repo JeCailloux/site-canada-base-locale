@@ -1547,7 +1547,6 @@ input[type="date"] { color-scheme: dark; }
    MR. WHITE (mrwhite.html)
    ============================================================ */
 .mw-app { max-width: 620px; }
-.mw-back { color: var(--text); text-decoration: none; }
 .mw-app .trip-chip { display: inline-block; }
 .mw-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
 .mw-mode {
@@ -1667,8 +1666,6 @@ input[type="date"] { color-scheme: dark; }
 .mw-win-undercover { border-color: rgba(248, 113, 113, 0.45); }
 .mw-win-white { border-color: rgba(248, 250, 252, 0.5); }
 
-.mw-launch { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.mw-launch .btn-primary { width: auto; text-decoration: none; }
 
 @media (max-width: 420px) {
   .mw-modes { grid-template-columns: 1fr; }
