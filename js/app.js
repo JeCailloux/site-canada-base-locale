@@ -1709,6 +1709,89 @@
     step(reduce ? 0 : 22);
   }
 
+  /* ================= Roue des tips ================= */
+  // Astuce : onglet Conduite, puis Défis, puis Tips => la roue est truquée sur 0 % (elle tremble).
+
+  var TIPS = [
+    { label: "0%", size: 8, color: "#EF4444" },
+    { label: "15%", size: 68.8, color: "#F59E0B" },
+    { label: "10%", size: 8, color: "#64748B" },
+    { label: "18%", size: 68.8, color: "#22C55E" },
+    { label: "20%", size: 68.8, color: "#3B82F6" },
+    { label: "25%", size: 68.8, color: "#A855F7" },
+    { label: "50%", size: 68.8, color: "#EC4899" }
+  ];
+  var tipsRot = 0, tipsSpinning = false, tipsRigged = false, tabTrail = [];
+
+  function buildTipsDisc() {
+    var disc = $("#tips-disc");
+    if (disc.childNodes.length) return;
+    var a = 0, stops = [];
+    TIPS.forEach(function (s) {
+      s.start = a;
+      stops.push(s.color + " " + a + "deg " + (a + s.size) + "deg");
+      var el = document.createElement("span");
+      el.className = "tips-label" + (s.size < 20 ? " tiny" : "");
+      el.textContent = s.label;
+      el.style.transform = "rotate(" + (a + s.size / 2) + "deg)";
+      disc.appendChild(el);
+      a += s.size;
+    });
+    disc.style.background = "conic-gradient(" + stops.join(",") + ")";
+  }
+
+  // Faux historique : les derniers restos (dépenses "food"), tip toujours >= 20 %
+  function renderTipsHistory() {
+    var high = TIPS.filter(function (s) { return parseInt(s.label, 10) >= 20; });
+    var restos = state.data.expenses.filter(function (e) { return e.category === "food" && e.date; })
+      .sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 5);
+    if (!restos.length) { // pas encore de resto saisi : dates bidon récentes
+      restos = [2, 6, 11, 17, 24].map(function (n) {
+        var d = new Date(); d.setDate(d.getDate() - n);
+        return { id: String(n), title: "Resto", date: d.toISOString().slice(0, 10) };
+      });
+    }
+    $("#tips-history").innerHTML = restos.map(function (e) {
+      var h = 0;
+      for (var i = 0; i < String(e.id).length; i++) h = (h * 31 + String(e.id).charCodeAt(i)) | 0;
+      var s = high[Math.abs(h) % high.length]; // stable pour une même dépense
+      var dl = new Date(e.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+      return '<li class="challenge-item"><span class="wh-date">' + esc(dl) + "</span>" +
+        '<span class="challenge-text">' + esc(e.title) + "</span>" +
+        '<strong style="color:' + s.color + '">' + s.label + "</strong></li>";
+    }).join("");
+  }
+
+  function setTipsRigged(on) {
+    tipsRigged = on;
+    $("#tips-wrap").classList.toggle("rigged", on);
+  }
+
+  function tipsSpin() {
+    if (tipsSpinning) return;
+    tipsSpinning = true;
+    var btn = $("#tips-spin"), out = $("#tips-result");
+    btn.disabled = true;
+    out.textContent = "…";
+    // angle du disque qui finit sous le pointeur (en haut)
+    var angle;
+    if (tipsRigged) angle = TIPS[0].start + TIPS[0].size * (0.3 + Math.random() * 0.4);
+    else angle = Math.random() * 360;
+    var seg = TIPS.filter(function (s) { return angle >= s.start && angle < s.start + s.size; })[0] || TIPS[TIPS.length - 1];
+    setTipsRigged(false);
+    var cur = ((tipsRot % 360) + 360) % 360;
+    tipsRot += 6 * 360 + ((360 - angle - cur + 720) % 360);
+    $("#tips-disc").style.transform = "rotate(" + tipsRot + "deg)";
+    var delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 300 : 5200;
+    setTimeout(function () {
+      out.textContent = "Tip : " + seg.label;
+      out.style.color = seg.color;
+      btn.disabled = false;
+      tipsSpinning = false;
+      toast(seg.label === "0%" ? "0 % de tip, dommage 😬" : "La roue dit " + seg.label + " !");
+    }, delay);
+  }
+
   /* ================= Export Excel ================= */
 
   function exportExcel() {
@@ -1963,6 +2046,7 @@
     // Conduite
     initFingerGame();
     $("#driver-spin").addEventListener("click", driverSpin);
+    $("#tips-spin").addEventListener("click", tipsSpin);
 
     $("#reset-btn").addEventListener("click", function () {
       askConfirm({
@@ -1988,6 +2072,12 @@
   function gotoTab(name) {
     $all(".tab").forEach(function (t) { t.classList.toggle("active", t.dataset.tab === name); });
     $all(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
+    tabTrail = tabTrail.concat(name).slice(-3);
+    if (name === "tips") {
+      buildTipsDisc();
+      renderTipsHistory();
+      if (!tipsSpinning) setTipsRigged(tabTrail.join() === "conduite,defis,tips");
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

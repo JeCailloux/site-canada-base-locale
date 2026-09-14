@@ -124,6 +124,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
         <span>Défis</span>
       </button>
+      <button class="tab" data-tab="tips">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2s1.3 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5V8M12 16v1.5"/></svg>
+        <span>Tips</span>
+      </button>
       <button class="tab" data-tab="mrwhite">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"/><path d="M5 11 7 4h10l2 7"/><circle cx="7.5" cy="16" r="3"/><circle cx="16.5" cy="16" r="3"/><path d="M10.5 16h3"/></svg>
         <span>Mr. White</span>
@@ -385,6 +389,26 @@
         <article class="card">
           <h2 class="card-title">Derniers tirages</h2>
           <ul id="wheel-history" class="wheel-history"></ul>
+        </article>
+      </section>
+
+      <!-- ===== Roue des tips ===== -->
+      <section id="tab-tips" class="tab-panel">
+        <article class="card">
+          <h2 class="card-title">La roue des tips</h2>
+          <p class="card-sub">Le serveur tourne la roue : elle décide du pourboire.</p>
+          <div class="tips-wrap" id="tips-wrap">
+            <div class="tips-disc" id="tips-disc"></div>
+            <div class="tips-pointer" aria-hidden="true"></div>
+            <div class="wheel-hub" aria-hidden="true"></div>
+          </div>
+          <div class="wheel-actions"><button class="btn-primary" id="tips-spin">Tourner la roue</button></div>
+          <div class="driver-slot" id="tips-result">—</div>
+        </article>
+
+        <article class="card">
+          <h2 class="card-title">Derniers tips</h2>
+          <ul id="tips-history" class="wheel-history"></ul>
         </article>
       </section>
 
