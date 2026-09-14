@@ -250,7 +250,7 @@
           var d = r.data || {};
           if (r.kind === "challenge") chals.push({ id: r.id, text: d.text, createdBy: d.createdBy, createdAt: d.createdAt });
           else if (r.kind === "plan") plans.push(planFields(d, r.id));
-          else if (r.kind === "shoplist") shops.push({ id: r.id, name: d.name, items: d.items || [], createdAt: d.createdAt });
+          else if (r.kind === "shoplist") shops.push({ id: r.id, name: d.name, items: d.items || [], createdAt: d.createdAt, finishedAt: d.finishedAt || null });
           else if (r.kind === "city") cities.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "hike") hikes.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "wheel" && d.date) wheel[d.date] = d;
@@ -332,7 +332,7 @@
 
     // ponytail: liste entière dans un seul enregistrement, deux modifs à la même seconde => la dernière gagne
     cloud.saveShop = function (l, isNew) {
-      var data = { name: l.name, items: l.items, createdAt: l.createdAt };
+      var data = { name: l.name, items: l.items, createdAt: l.createdAt, finishedAt: l.finishedAt || null };
       var op = isNew
         ? pb.collection("meta").create({ kind: "shoplist", data: data })
         : pb.collection("meta").update(l.id, { data: data });
@@ -1625,11 +1625,11 @@
 
   /* ================= Liste de courses ================= */
 
-  var shopId = null; // liste affichée (sinon la plus récente)
+  var shopId = null; // liste en cours choisie (sinon la plus récente pas finie)
 
   function shopActive() {
-    var lists = state.data.shoplists;
-    return lists.filter(function (l) { return l.id === shopId; })[0] || lists[0] || null;
+    var open = state.data.shoplists.filter(function (l) { return !l.finishedAt; });
+    return open.filter(function (l) { return l.id === shopId; })[0] || open[0] || null;
   }
 
   // enregistre la liste : affichage immédiat en local, puis synchro
@@ -1652,15 +1652,18 @@
     return state.data.shoplists.filter(function (l) { return l.id === id; })[0];
   }
 
+  function plural(n, word) { return n + " " + word + (n > 1 ? "s" : ""); }
+
   function renderShop() {
     var box = $("#shop-items");
     if (!box) return;
     if (box.querySelector(".shop-edit")) return; // ne pas casser une modif en cours
     var l = shopActive();
     $("#shop-title").textContent = l ? l.name : "Liste de courses";
+    $("#shop-finish").hidden = !l;
     if (!l || !l.items.length) {
       $("#shop-count").textContent = "";
-      box.innerHTML = '<li class="empty-state">' + (l ? "Liste vide : ajoute un article." : "Aucune liste : ajoute un article pour en créer une.") + "</li>";
+      box.innerHTML = '<li class="empty-state">' + (l ? "Liste vide : ajoute un article." : "Pas de liste en cours : ajoute un article ou réutilise une ancienne liste.") + "</li>";
     } else {
       var done = l.items.filter(function (it) { return it.done; }).length;
       $("#shop-count").textContent = done + " / " + l.items.length + " dans le panier";
@@ -1676,12 +1679,16 @@
 
     var old = state.data.shoplists.filter(function (x) { return x !== l; });
     $("#shop-old").innerHTML = old.length ? old.map(function (o) {
-      return '<li class="wish-item" data-id="' + esc(o.id) + '">' +
-        '<span class="wish-name">' + esc(o.name) + '<small class="shop-sub">' + o.items.length + " article" + (o.items.length > 1 ? "s" : "") + "</small></span>" +
-        '<button type="button" class="btn-ghost btn-xs shop-open">Ouvrir</button>' +
-        '<button type="button" class="btn-primary btn-sm shop-copy">Copier</button>' +
+      var when = o.finishedAt
+        ? "finie le " + new Date(o.finishedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+        : "pas finie";
+      return '<li class="shop-hist" data-id="' + esc(o.id) + '">' +
+        '<details><summary><span class="wish-name">' + esc(o.name) +
+        '<small class="shop-sub">' + plural(o.items.length, "article") + " · " + when + "</small></span></summary>" +
+        '<p class="shop-peek">' + (o.items.map(function (it) { return esc(it.text); }).join(" · ") || "Liste vide") + "</p></details>" +
+        '<button type="button" class="btn-primary btn-sm shop-copy">Réutiliser</button>' +
         '<button type="button" class="icon-btn shop-drop" aria-label="Supprimer la liste">' + TRASH_ICON + "</button></li>";
-    }).join("") : '<li class="empty-state">Les listes précédentes apparaîtront ici.</li>';
+    }).join("") : '<li class="empty-state">Les courses finies apparaîtront ici.</li>';
   }
 
   function shopEdit(li, l) {
@@ -1721,10 +1728,20 @@
       $("#shop-input").focus();
     });
 
-    $("#shop-new").addEventListener("click", function () {
+    $("#shop-finish").addEventListener("click", function () {
       var l = shopActive();
-      if (l && !l.items.length) { toast("La liste en cours est déjà vide"); return; }
-      shopCreate();
+      if (!l) return;
+      var left = l.items.filter(function (it) { return !it.done; }).length;
+      var go = left
+        ? askConfirm({ title: "Courses finies ?", message: "Il reste " + plural(left, "article") + " pas coché" + (left > 1 ? "s" : "") + ". La liste part quand même dans l'historique.", confirmLabel: "C'est fini", danger: false })
+        : Promise.resolve(true);
+      go.then(function (yes) {
+        if (!yes) return;
+        l.finishedAt = new Date().toISOString();
+        shopId = null;
+        shopSave(l);
+        toast("Courses finies, liste rangée dans l'historique");
+      });
     });
 
     $("#shop-items").addEventListener("click", function (e) {
@@ -1741,12 +1758,19 @@
       var li = e.target.closest("li[data-id]");
       var o = li && shopFind(li.dataset.id);
       if (!o) return;
-      if (e.target.closest(".shop-open")) { shopId = o.id; renderShop(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-      else if (e.target.closest(".shop-copy")) {
-        var copy = o.items.map(function (it) { return { id: uid(), text: it.text, done: false }; });
+      if (e.target.closest(".shop-copy")) {
+        // ajoute à la liste en cours les articles qui n'y sont pas déjà
         var cur = shopActive();
-        if (cur && !cur.items.length) { cur.items = copy; shopSave(cur); } else shopCreate(copy); // remplit la liste vide en cours
-        toast("Liste copiée : " + o.items.length + " article" + (o.items.length > 1 ? "s" : ""));
+        var have = (cur ? cur.items : []).map(function (it) { return it.text.toLowerCase(); });
+        var add = o.items.filter(function (it) {
+          var k = it.text.toLowerCase();
+          if (have.indexOf(k) >= 0) return false;
+          have.push(k);
+          return true;
+        }).map(function (it) { return { id: uid(), text: it.text, done: false }; });
+        if (!add.length) { toast("Tout est déjà dans la liste en cours"); return; }
+        if (cur) { cur.items = cur.items.concat(add); shopSave(cur); } else shopCreate(add);
+        toast(plural(add.length, "article") + " ajouté" + (add.length > 1 ? "s" : "") + " à la liste");
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else if (e.target.closest(".shop-drop")) {
         askConfirm({ title: "Supprimer cette liste ?", message: o.name, confirmLabel: "Supprimer" }).then(function (yes) {
