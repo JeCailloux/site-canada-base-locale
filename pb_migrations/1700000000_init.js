@@ -6,7 +6,10 @@ migrate((db) => {
   const txt = (name) => ({ name: name, type: "text", required: false, options: { min: null, max: null, pattern: "" } });
   const num = (name) => ({ name: name, type: "number", required: false, options: { min: null, max: null, noDecimal: false } });
   const json = (name) => ({ name: name, type: "json", required: false, options: { maxSize: 2000000 } });
+  // collections déjà créées à la main (base existante) : ne rien toucher
+  const exists = (name) => { try { Dao(db).findCollectionByNameOrId(name); return true; } catch (e) { return false; } };
 
+  if (!exists("expenses")) {
   const expenses = new Collection({
     name: "expenses",
     type: "base",
@@ -18,7 +21,9 @@ migrate((db) => {
     ]
   });
   Dao(db).saveCollection(expenses);
+  }
 
+  if (!exists("meta")) {
   const meta = new Collection({
     name: "meta",
     type: "base",
@@ -26,6 +31,7 @@ migrate((db) => {
     schema: [ txt("kind"), json("data") ]
   });
   Dao(db).saveCollection(meta);
+  }
 }, (db) => {
   const dao = Dao(db);
   try { dao.deleteCollection(dao.findCollectionByNameOrId("expenses")); } catch (e) {}
