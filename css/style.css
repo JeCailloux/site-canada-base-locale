@@ -1370,6 +1370,18 @@ input[type="date"] { color-scheme: dark; }
 .wish-name { flex: 1; font-weight: 700; font-size: 0.96rem; }
 .wish-by { color: var(--text-dim); font-size: 0.76rem; }
 
+/* ---------- Liste de courses ---------- */
+.shop-check {
+  width: 24px; height: 24px; flex: none;
+  accent-color: var(--aurora);
+  cursor: pointer;
+}
+.shop-text { cursor: text; overflow-wrap: anywhere; }
+.shop-item.done .shop-text { text-decoration: line-through; color: var(--text-dim); font-weight: 600; }
+.shop-edit { flex: 1; min-width: 0; padding-block: 8px; }
+.shop-sub { display: block; color: var(--text-dim); font-size: 0.76rem; font-weight: 600; }
+#shop-old .wish-item { gap: 8px; }
+
 /* ---------- Conduite : jeu des doigts ---------- */
 .finger-arena {
   position: relative;

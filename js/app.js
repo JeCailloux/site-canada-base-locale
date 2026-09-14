@@ -192,6 +192,7 @@
     if (!Array.isArray(raw.cities)) raw.cities = [];
     if (!Array.isArray(raw.hikes)) raw.hikes = [];
     if (!Array.isArray(raw.plans)) raw.plans = [];
+    if (!Array.isArray(raw.shoplists)) raw.shoplists = [];
     state.data = raw;
   }
 
@@ -244,11 +245,12 @@
 
     cloud.refetchMeta = function () {
       return pb.collection("meta").getFullList({ sort: "created" }).then(function (recs) {
-        var chals = [], cities = [], hikes = [], wheel = {}, plans = [];
+        var chals = [], cities = [], hikes = [], wheel = {}, plans = [], shops = [];
         recs.forEach(function (r) {
           var d = r.data || {};
           if (r.kind === "challenge") chals.push({ id: r.id, text: d.text, createdBy: d.createdBy, createdAt: d.createdAt });
           else if (r.kind === "plan") plans.push(planFields(d, r.id));
+          else if (r.kind === "shoplist") shops.push({ id: r.id, name: d.name, items: d.items || [], createdAt: d.createdAt });
           else if (r.kind === "city") cities.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "hike") hikes.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "wheel" && d.date) wheel[d.date] = d;
@@ -267,6 +269,7 @@
         state.data.hikes = hikes;
         state.data.wheel = wheel;
         state.data.plans = plans;
+        state.data.shoplists = shops.sort(sortByCreated).reverse();
         saveData();
         if (state.user) renderAll();
       }).catch(function () { updateSyncBadge(false); });
@@ -325,6 +328,16 @@
         ? pb.collection("meta").update(p.id, { data: data })
         : pb.collection("meta").create({ kind: "plan", data: data });
       return op.then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
+    };
+
+    // ponytail: liste entière dans un seul enregistrement, deux modifs à la même seconde => la dernière gagne
+    cloud.saveShop = function (l, isNew) {
+      var data = { name: l.name, items: l.items, createdAt: l.createdAt };
+      var op = isNew
+        ? pb.collection("meta").create({ kind: "shoplist", data: data })
+        : pb.collection("meta").update(l.id, { data: data });
+      return op.then(function (rec) { if (isNew) shopId = rec.id; return cloud.refetchMeta(); })
+        .catch(function () { toast("Enregistrement échoué", true); });
     };
 
     // --- temps réel ---
@@ -504,6 +517,7 @@
     renderDefis();
     renderAgency();
     renderPlanning();
+    renderShop();
   }
 
   function renderStats() {
@@ -1609,6 +1623,145 @@
     }).join("");
   }
 
+  /* ================= Liste de courses ================= */
+
+  var shopId = null; // liste affichée (sinon la plus récente)
+
+  function shopActive() {
+    var lists = state.data.shoplists;
+    return lists.filter(function (l) { return l.id === shopId; })[0] || lists[0] || null;
+  }
+
+  // enregistre la liste : affichage immédiat en local, puis synchro
+  function shopSave(l, isNew) {
+    if (!isNew || !cloud) {
+      if (isNew) state.data.shoplists.unshift(l);
+      shopId = l.id;
+      saveData();
+      renderShop();
+    }
+    if (cloud) cloud.saveShop(l, isNew);
+  }
+
+  function shopCreate(items) {
+    var d = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    shopSave({ id: uid(), name: "Courses du " + d, items: items || [], createdAt: new Date().toISOString() }, true);
+  }
+
+  function shopFind(id) {
+    return state.data.shoplists.filter(function (l) { return l.id === id; })[0];
+  }
+
+  function renderShop() {
+    var box = $("#shop-items");
+    if (!box) return;
+    if (box.querySelector(".shop-edit")) return; // ne pas casser une modif en cours
+    var l = shopActive();
+    $("#shop-title").textContent = l ? l.name : "Liste de courses";
+    if (!l || !l.items.length) {
+      $("#shop-count").textContent = "";
+      box.innerHTML = '<li class="empty-state">' + (l ? "Liste vide : ajoute un article." : "Aucune liste : ajoute un article pour en créer une.") + "</li>";
+    } else {
+      var done = l.items.filter(function (it) { return it.done; }).length;
+      $("#shop-count").textContent = done + " / " + l.items.length + " dans le panier";
+      // non cochés d'abord
+      var sorted = l.items.filter(function (it) { return !it.done; }).concat(l.items.filter(function (it) { return it.done; }));
+      box.innerHTML = sorted.map(function (it) {
+        return '<li class="wish-item shop-item' + (it.done ? " done" : "") + '" data-id="' + esc(it.id) + '">' +
+          '<input type="checkbox" class="shop-check"' + (it.done ? " checked" : "") + ' aria-label="Cocher">' +
+          '<span class="wish-name shop-text">' + esc(it.text) + "</span>" +
+          '<button type="button" class="icon-btn shop-del" aria-label="Supprimer">' + TRASH_ICON + "</button></li>";
+      }).join("");
+    }
+
+    var old = state.data.shoplists.filter(function (x) { return x !== l; });
+    $("#shop-old").innerHTML = old.length ? old.map(function (o) {
+      return '<li class="wish-item" data-id="' + esc(o.id) + '">' +
+        '<span class="wish-name">' + esc(o.name) + '<small class="shop-sub">' + o.items.length + " article" + (o.items.length > 1 ? "s" : "") + "</small></span>" +
+        '<button type="button" class="btn-ghost btn-xs shop-open">Ouvrir</button>' +
+        '<button type="button" class="btn-primary btn-sm shop-copy">Copier</button>' +
+        '<button type="button" class="icon-btn shop-drop" aria-label="Supprimer la liste">' + TRASH_ICON + "</button></li>";
+    }).join("") : '<li class="empty-state">Les listes précédentes apparaîtront ici.</li>';
+  }
+
+  function shopEdit(li, l) {
+    var it = l.items.filter(function (x) { return x.id === li.dataset.id; })[0];
+    var span = li.querySelector(".shop-text");
+    var input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 80;
+    input.className = "shop-edit";
+    input.value = it.text;
+    span.replaceWith(input);
+    input.focus();
+    var finished = false;
+    function finish(keep) {
+      if (finished) return;
+      finished = true;
+      var v = input.value.trim();
+      input.remove(); // libère renderShop
+      if (keep && v && v !== it.text) { it.text = v; shopSave(l); } else renderShop();
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") finish(true);
+      if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", function () { finish(true); });
+  }
+
+  function bindShop() {
+    $("#shop-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = $("#shop-input").value.trim();
+      if (!v) return;
+      var it = { id: uid(), text: v, done: false };
+      var l = shopActive();
+      if (l) { l.items.push(it); shopSave(l); } else shopCreate([it]);
+      $("#shop-input").value = "";
+      $("#shop-input").focus();
+    });
+
+    $("#shop-new").addEventListener("click", function () {
+      var l = shopActive();
+      if (l && !l.items.length) { toast("La liste en cours est déjà vide"); return; }
+      shopCreate();
+    });
+
+    $("#shop-items").addEventListener("click", function (e) {
+      var li = e.target.closest(".shop-item"), l = shopActive();
+      if (!li || !l) return;
+      var it = l.items.filter(function (x) { return x.id === li.dataset.id; })[0];
+      if (!it) return;
+      if (e.target.closest(".shop-check")) { it.done = e.target.checked; shopSave(l); }
+      else if (e.target.closest(".shop-del")) { l.items = l.items.filter(function (x) { return x !== it; }); shopSave(l); }
+      else if (e.target.closest(".shop-text")) shopEdit(li, l);
+    });
+
+    $("#shop-old").addEventListener("click", function (e) {
+      var li = e.target.closest("li[data-id]");
+      var o = li && shopFind(li.dataset.id);
+      if (!o) return;
+      if (e.target.closest(".shop-open")) { shopId = o.id; renderShop(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+      else if (e.target.closest(".shop-copy")) {
+        var copy = o.items.map(function (it) { return { id: uid(), text: it.text, done: false }; });
+        var cur = shopActive();
+        if (cur && !cur.items.length) { cur.items = copy; shopSave(cur); } else shopCreate(copy); // remplit la liste vide en cours
+        toast("Liste copiée : " + o.items.length + " article" + (o.items.length > 1 ? "s" : ""));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else if (e.target.closest(".shop-drop")) {
+        askConfirm({ title: "Supprimer cette liste ?", message: o.name, confirmLabel: "Supprimer" }).then(function (yes) {
+          if (!yes) return;
+          if (cloud) cloud.delMeta(o.id);
+          else {
+            state.data.shoplists = state.data.shoplists.filter(function (x) { return x !== o; });
+            saveData();
+            renderShop();
+          }
+        });
+      }
+    });
+  }
+
   /* ================= Conduite : jeu des doigts + roulette ================= */
 
   var FINGER_COLORS = ["#F59E0B", "#34D399", "#A78BFA", "#38BDF8", "#FB7185", "#FBBF24", "#F472B6", "#4ADE80", "#60A5FA", "#FB923C"];
@@ -1793,10 +1946,10 @@
     btn.disabled = true;
     out.textContent = "…";
     // angle du disque qui finit sous le pointeur (en haut)
-    var angle;
-    if (tipsRigged) angle = TIPS[0].start + TIPS[0].size * (0.3 + Math.random() * 0.4);
-    else angle = Math.random() * 360;
-    var seg = TIPS.filter(function (s) { return angle >= s.start && angle < s.start + s.size; })[0] || TIPS[TIPS.length - 1];
+    // truquée : 0 % ; sinon jamais 0 ni 10 %, au hasard parmi les autres
+    var ok = TIPS.filter(function (s) { return parseInt(s.label, 10) > 10; });
+    var seg = tipsRigged ? TIPS[0] : ok[(Math.random() * ok.length) | 0];
+    var angle = seg.start + seg.size * (tipsRigged ? 0.3 + Math.random() * 0.4 : 0.1 + Math.random() * 0.8);
     setTipsRigged(false);
     var cur = ((tipsRot % 360) + 360) % 360;
     tipsRot += 6 * 360 + ((360 - angle - cur + 720) % 360);
@@ -2066,6 +2219,7 @@
     initFingerGame();
     $("#driver-spin").addEventListener("click", driverSpin);
     $("#tips-spin").addEventListener("click", tipsSpin);
+    bindShop();
 
     $("#reset-btn").addEventListener("click", function () {
       askConfirm({
