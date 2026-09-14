@@ -1713,31 +1713,50 @@
   // Astuce : onglet Conduite, puis Défis, puis Tips => la roue est truquée sur 0 % (elle tremble).
 
   var TIPS = [
-    { label: "0%", size: 8, color: "#EF4444" },
-    { label: "15%", size: 68.8, color: "#F59E0B" },
-    { label: "10%", size: 8, color: "#64748B" },
-    { label: "18%", size: 68.8, color: "#22C55E" },
-    { label: "20%", size: 68.8, color: "#3B82F6" },
-    { label: "25%", size: 68.8, color: "#A855F7" },
-    { label: "50%", size: 68.8, color: "#EC4899" }
+    { label: "0%", size: 8, color: "#B91C1C" },
+    { label: "15%", size: 68.8, color: "#D97706" },
+    { label: "10%", size: 8, color: "#334155" },
+    { label: "18%", size: 68.8, color: "#059669" },
+    { label: "20%", size: 68.8, color: "#0284C7" },
+    { label: "25%", size: 68.8, color: "#7C3AED" },
+    { label: "50%", size: 68.8, color: "#DB2777" }
   ];
   var tipsRot = 0, tipsSpinning = false, tipsRigged = false, tabTrail = [];
+
+  // point sur le cercle : angle 0 = en haut, sens horaire
+  function tipsPt(r, deg) {
+    var a = deg * Math.PI / 180;
+    return (r * Math.sin(a)).toFixed(2) + " " + (-r * Math.cos(a)).toFixed(2);
+  }
 
   function buildTipsDisc() {
     var disc = $("#tips-disc");
     if (disc.childNodes.length) return;
-    var a = 0, stops = [];
+    var R = 88, a = 0, parts = "", labels = "";
     TIPS.forEach(function (s) {
       s.start = a;
-      stops.push(s.color + " " + a + "deg " + (a + s.size) + "deg");
-      var el = document.createElement("span");
-      el.className = "tips-label" + (s.size < 20 ? " tiny" : "");
-      el.textContent = s.label;
-      el.style.transform = "rotate(" + (a + s.size / 2) + "deg)";
-      disc.appendChild(el);
-      a += s.size;
+      var end = a + s.size, mid = a + s.size / 2, tiny = s.size < 20;
+      parts += '<path d="M0 0L' + tipsPt(R, a) + "A" + R + " " + R + " 0 " + (s.size > 180 ? 1 : 0) + " 1 " + tipsPt(R, end) +
+        'Z" fill="' + s.color + '"/>';
+      // texte le long du rayon, retourné côté gauche pour rester lisible
+      var flip = mid > 180;
+      labels += '<text transform="rotate(' + (flip ? mid + 90 : mid - 90) + ')" x="' + (flip ? -1 : 1) * (tiny ? 72 : 58) + '" y="0" class="tips-txt' + (tiny ? " tiny" : "") +
+        '">' + s.label + "</text>";
+      a = end;
     });
-    disc.style.background = "conic-gradient(" + stops.join(",") + ")";
+    var sep = TIPS.map(function (s) { return '<line x1="0" y1="0" x2="' + tipsPt(R, s.start).replace(" ", '" y2="') + '"/>'; }).join("");
+    disc.innerHTML = '<svg viewBox="-90 -90 180 180">' +
+      '<defs><radialGradient id="tips-shade"><stop offset=".25" stop-color="#fff" stop-opacity=".18"/>' +
+      '<stop offset=".7" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#020617" stop-opacity=".45"/></radialGradient></defs>' +
+      parts + '<circle r="' + R + '" fill="url(#tips-shade)"/>' +
+      '<g stroke="#FDE68A" stroke-opacity=".55" stroke-width="1.2">' + sep + "</g>" + labels + "</svg>";
+
+    var bulbs = "";
+    for (var i = 0; i < 24; i++) bulbs += '<circle r="2.6" transform="translate(' + tipsPt(95, i * 15) + ')" class="' + (i % 2 ? "b2" : "b1") + '"/>';
+    $("#tips-rim").innerHTML = '<svg viewBox="-100 -100 200 200">' +
+      '<defs><linearGradient id="tips-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FDE68A"/>' +
+      '<stop offset=".45" stop-color="#F59E0B"/><stop offset="1" stop-color="#92400E"/></linearGradient></defs>' +
+      '<circle r="95" fill="#0B1120" stroke="url(#tips-gold)" stroke-width="9"/>' + bulbs + "</svg>";
   }
 
   // Faux historique : les derniers restos (dépenses "food"), tip toujours >= 20 %

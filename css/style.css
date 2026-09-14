@@ -1270,39 +1270,70 @@ input[type="date"] { color-scheme: dark; }
   25% { transform: rotate(-1.5deg); }
   75% { transform: rotate(1.5deg); }
 }
-.tips-disc {
-  position: absolute;
+.tips-rim, .tips-disc { position: absolute; }
+.tips-rim svg, .tips-disc svg { display: block; width: 100%; height: 100%; }
+.tips-rim {
   inset: 0;
   border-radius: 50%;
-  border: 4px solid rgba(148, 163, 184, 0.35);
-  box-shadow: 0 0 40px rgba(245, 158, 11, 0.15), inset 0 0 30px rgba(2, 6, 23, 0.45);
+  box-shadow: 0 0 50px rgba(245, 158, 11, 0.25), 0 18px 40px rgba(2, 6, 23, 0.6);
+}
+.tips-rim .b1 { fill: #FEF3C7; animation: tipsBulb 1.2s steps(1) infinite; }
+.tips-rim .b2 { fill: #FEF3C7; animation: tipsBulb 1.2s steps(1) infinite 0.6s; }
+@keyframes tipsBulb {
+  0% { fill: #FFFBEB; filter: drop-shadow(0 0 3px #FDE68A); }
+  50% { fill: #78350F; filter: none; }
+}
+.tips-disc {
+  inset: 6%;
+  border-radius: 50%;
   transition: transform 5s cubic-bezier(0.12, 0.75, 0.2, 1);
 }
-.tips-label {
-  position: absolute;
-  inset: 0;
-  text-align: center;
-  padding-top: 9%;
+.tips-txt {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 1.05rem;
-  color: #0B1120;
+  font-size: 15px;
+  fill: #fff;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(2, 6, 23, 0.45);
+  stroke-width: 2.5px;
 }
-.tips-label.tiny { font-size: 0.5rem; padding-top: 3%; }
+.tips-txt.tiny { font-size: 5.5px; stroke-width: 1px; }
 .tips-pointer {
   position: absolute;
   left: 50%;
-  top: -14px;
+  top: -6%;
+  width: 13%;
   transform: translateX(-50%);
-  border: 12px solid transparent;
-  border-top: 22px solid var(--gold);
-  filter: drop-shadow(0 3px 6px rgba(2, 6, 23, 0.6));
+  filter: drop-shadow(0 4px 6px rgba(2, 6, 23, 0.7));
   z-index: 3;
+}
+.tips-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: #0B1120;
+  background: radial-gradient(circle at 35% 30%, #FEF3C7, #F59E0B 55%, #92400E);
+  border: 3px solid #0B1120;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.5), 0 6px 16px rgba(2, 6, 23, 0.6);
+  z-index: 4;
 }
 #tips-result { margin-top: 16px; }
 
 @media (prefers-reduced-motion: reduce) {
   .tips-disc { transition: none; }
+  .tips-rim circle { animation: none !important; }
   .tips-wrap.rigged { animation-duration: 1.5s; }
 }
 
