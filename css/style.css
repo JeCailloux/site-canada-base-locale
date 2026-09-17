@@ -170,8 +170,8 @@ body:not(.in-app) #bg3d { display: none; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 26px 24px 22px;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: var(--shadow-card);
   text-align: left;
   will-change: transform;
@@ -461,8 +461,8 @@ input[type="date"] { color-scheme: dark; }
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 5px;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   margin-bottom: 22px;
   position: sticky;
   top: 10px;
@@ -507,8 +507,8 @@ input[type="date"] { color-scheme: dark; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 22px;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: var(--shadow-card);
   margin-bottom: 18px;
 }
@@ -904,8 +904,8 @@ input[type="date"] { color-scheme: dark; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 16px 18px;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   gap: 13px;
   align-items: flex-start;
@@ -1671,6 +1671,17 @@ input[type="date"] { color-scheme: dark; }
 .plan-item-main strong { font-size: 0.95rem; }
 .plan-item-main span { color: var(--text-dim); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plan-badge { flex: none; font-size: 0.7rem; font-weight: 800; border-radius: 100px; padding: 3px 10px; }
+
+/* Agenda des cours */
+.ag-day { font-family: var(--font-display); font-size: 0.95rem; text-transform: capitalize; color: var(--text-dim); margin: 18px 0 8px; }
+.ag-day:first-child { margin-top: 0; }
+.ag-day.is-today { color: var(--gold-soft); }
+.ag-item { cursor: default; }
+.ag-item .plan-item-main span { white-space: normal; }
+.ag-item a { color: var(--ice); }
+.plan-item-main .ag-note { color: var(--gold-soft); font-weight: 700; }
+.ag-onsite { color: var(--aurora); background: rgba(52, 211, 153, 0.14); }
+.ag-remote { color: var(--violet); background: rgba(167, 139, 250, 0.14); }
 
 @media (max-width: 640px) {
   .plan-week { grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 4px; }

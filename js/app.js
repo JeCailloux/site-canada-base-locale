@@ -1337,6 +1337,40 @@
     }).join("");
   }
 
+  /* ================= Agenda des cours ================= */
+
+  var agDate = null;
+
+  function renderAgenda() {
+    var AG = window.CaribouAgenda, body = $("#ag-body");
+    if (!AG || !body || !PL) return;
+    if (!agDate) agDate = todayISO();
+    var days = PL.weekDays(agDate), today = todayISO();
+    $("#ag-title").textContent = "Semaine du " + dm(days[0]) + " au " + dm(days[6]);
+    var list = AG.sessions(days[0], days[6]);
+    if (!list.length) { body.innerHTML = '<p class="empty-state">Pas de cours cette semaine.</p>'; return; }
+
+    var html = "", lastDay = "";
+    list.forEach(function (s) {
+      var c = s.course;
+      if (s.day !== lastDay) {
+        html += (lastDay ? "</ul>" : "") + '<h3 class="ag-day' + (s.day === today ? " is-today" : "") + '">' +
+          esc(fmtDayLong.format(PL.parse(s.day))) + '</h3><ul class="plan-list">';
+        lastDay = s.day;
+      }
+      var where = s.remote
+        ? (c.visio ? '<a href="' + esc(c.visio) + '" target="_blank" rel="noopener">Rejoindre la visio' + (c.tool ? " " + esc(c.tool) : "") + "</a>"
+                   : "Lien " + (c.tool ? esc(c.tool) + " " : "visio ") + 'sur <a href="' + esc(c.moodle || "https://moodle.uqo.ca") + '" target="_blank" rel="noopener">Moodle</a>')
+        : esc(c.room || "Salle non précisée");
+      html += '<li class="plan-item ag-item"><div class="plan-item-main">' +
+        "<strong>" + esc(c.code) + " · " + esc(c.name) + "</strong>" +
+        "<span>" + esc(c.time || "Horaire non précisé") + " · " + where + "</span>" +
+        (s.note ? '<span class="ag-note">' + esc(s.note) + "</span>" : "") +
+        '</div><span class="plan-badge ' + (s.remote ? "ag-remote" : "ag-onsite") + '">' + (s.remote ? "Distanciel" : "Présentiel") + "</span></li>";
+    });
+    body.innerHTML = html + "</ul>";
+  }
+
   /* ================= Planning (qui va où) ================= */
 
   var PL = window.CaribouPlanning;
@@ -1344,6 +1378,7 @@
   var fmtDayShort = new Intl.DateTimeFormat("fr-FR", { weekday: "short" });
   var fmtDM = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
   var fmtMonth = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" });
+  var fmtDayLong = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   var plan = { view: "week", date: null, editing: null, type: "trip", who: [] };
 
   function planFields(d, id) {
@@ -1551,6 +1586,9 @@
     $("#plan-prev").addEventListener("click", function () { move(-1); });
     $("#plan-next").addEventListener("click", function () { move(1); });
     $("#plan-today").addEventListener("click", function () { plan.date = todayISO(); renderPlanning(); });
+    $("#ag-prev").addEventListener("click", function () { agDate = PL.addDays(agDate, -7); renderAgenda(); });
+    $("#ag-next").addEventListener("click", function () { agDate = PL.addDays(agDate, 7); renderAgenda(); });
+    $("#ag-today").addEventListener("click", function () { agDate = todayISO(); renderAgenda(); });
     $("#plan-add").addEventListener("click", function () { openPlanModal(null); });
     $("#plan-modal-close").addEventListener("click", closePlanModal);
     $("#plan-modal").addEventListener("click", function (e) { if (e.target === $("#plan-modal")) closePlanModal(); });
@@ -2270,6 +2308,7 @@
     $all(".tab").forEach(function (t) { t.classList.toggle("active", t.dataset.tab === name); });
     $all(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     tabTrail = tabTrail.concat(name).slice(-3);
+    if (name === "agenda") renderAgenda();
     if (name === "tips") {
       buildTipsDisc();
       renderTipsHistory();
