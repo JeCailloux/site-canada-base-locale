@@ -27,8 +27,9 @@
   var SNOW_COUNT = 1300;
 
   function init() {
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+    // décor de fond : pas d'anticrénelage ni de haute résolution (coût GPU x3 sur les écrans HiDPI)
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, alpha: true, powerPreference: "low-power" });
+    renderer.setPixelRatio(1);
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     scene = new THREE.Scene();
@@ -634,8 +635,13 @@
   }
 
   /* ---------- Boucle ---------- */
+  var frameAcc = 0;
   function tick() {
-    var dt = Math.min(clock.getDelta(), 0.05);
+    // 30 images/s suffisent pour un fond (sinon 144/s sur un écran 144 Hz, flou des cartes recalculé à chaque fois)
+    frameAcc += clock.getDelta();
+    if (frameAcc < 1 / 32) return;
+    var dt = Math.min(frameAcc, 0.05);
+    frameAcc = 0;
     var t = clock.elapsedTime;
 
     // canvas masqué (page de connexion) : on ne rend rien

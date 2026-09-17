@@ -2,7 +2,14 @@
 bastien-site.duckdns.org {
 	root * /srv
 	file_server
-	encode gzip
+	encode zstd gzip
+
+	# cache : médias gardés 7 jours ; HTML/JS/CSS revalidés à chaque visite
+	# (réponse 304 quasi instantanée, et une mise en ligne est visible tout de suite sans vider le cache)
+	@media path *.mp4 *.png *.jpg *.jpeg *.webp *.svg *.ico *.woff2
+	header @media Cache-Control "public, max-age=604800"
+	@code path / *.html *.js *.css
+	header @code Cache-Control "no-cache"
 
 	# ne pas exposer les fichiers internes (import.html reste accessible pour l'import ponctuel)
 	@hidden path /.git* /Caddyfile /docker-compose.yml /README.md /caribou-dump.json
@@ -12,4 +19,9 @@ bastien-site.duckdns.org {
 # PocketBase (base locale) — API + admin (/_/)
 bastien-db.duckdns.org {
 	reverse_proxy pocketbase:8090
+}
+
+# Nous deux (Django) — conteneur ambre-web du projet site-ambre
+bastien-all.duckdns.org {
+	reverse_proxy ambre-web:8000
 }
