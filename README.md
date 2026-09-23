@@ -66,6 +66,21 @@ Les périodes vivent dans la table `meta` (`kind` = `plan`).
 
 Vérif des calculs de dates : `node tests/planning.test.js`
 
+## Itinéraire (onglet Voyage)
+
+Carte Canada / USA (Leaflet + OpenStreetMap) : on touche la carte ou on cherche une adresse
+(Nominatim) pour ajouter une étape ou un hôtel (nom, adresse, dates, arrivée en voiture ou en avion).
+Les étapes se relient dans l'ordre des dates ; les trajets en voiture suivent la route (OSRM) avec
+km et temps de conduite, les vols sont en pointillés. Lien « Ouvrir dans Google Maps » pour tout le trajet.
+Plusieurs trajets possibles (Calgary, Miami…), chacun sur sa carte : on choisit le trajet en haut de la carte.
+Les trajets et étapes vivent dans la table `meta` (`kind` = `trip` / `stop`).
+
+Vérif des calculs : `node tests/itineraire.test.js`
+
+## Films
+
+Onglet **Films** : wish list de films (`meta`, `kind` = `movie`).
+
 ## Mr. White
 
 Onglet **Mr. White** → [`mrwhite.html`](mrwhite.html) : jeu Undercover, sur un seul téléphone

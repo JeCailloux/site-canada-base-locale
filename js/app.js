@@ -39,27 +39,37 @@
   var fmtCAD0 = new Intl.NumberFormat("fr-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
   var fmtEUR = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
   var fmtEUR0 = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+  var fmtUSD = new Intl.NumberFormat("fr-CA", { style: "currency", currency: "USD" });
+  var fmtUSD0 = new Intl.NumberFormat("fr-CA", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   var fmtDate = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  var FMT = { CAD: [fmtCAD, fmtCAD0], EUR: [fmtEUR, fmtEUR0], USD: [fmtUSD, fmtUSD0] };
+
+  function validCur(c) { return FMT[c] ? c : "CAD"; }
+  // 1 unité de la devise = X CAD
+  function rateOf(cur) {
+    return cur === "EUR" ? state.data.eurToCad : cur === "USD" ? state.data.usdToCad : 1;
+  }
 
   var LS_CUR = "caribou_display_cur";
-  var displayCur = (localStorage.getItem(LS_CUR) === "EUR") ? "EUR" : "CAD";
+  var displayCur = validCur(localStorage.getItem(LS_CUR));
 
   // Montant fourni en CAD → formaté dans la devise d'affichage choisie
   function M(cad) {
-    return displayCur === "EUR" ? fmtEUR.format(cad / state.data.eurToCad) : fmtCAD.format(cad);
+    return FMT[displayCur][0].format(cad / rateOf(displayCur));
   }
   function M0(cad) {
-    return displayCur === "EUR" ? fmtEUR0.format(cad / state.data.eurToCad) : fmtCAD0.format(cad);
+    return FMT[displayCur][1].format(cad / rateOf(displayCur));
   }
-  // même montant dans l'autre devise (note secondaire)
+  // même montant dans une autre devise (note secondaire) : EUR si on affiche des CAD, sinon CAD
   function MOther(cad) {
-    return displayCur === "EUR" ? fmtCAD.format(cad) : fmtEUR.format(cad / state.data.eurToCad);
+    var o = displayCur === "CAD" ? "EUR" : "CAD";
+    return FMT[o][0].format(cad / rateOf(o));
   }
   function syncCurButtons() {
     $all(".cur-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.cur === displayCur); });
   }
   function setDisplayCur(cur) {
-    displayCur = cur === "EUR" ? "EUR" : "CAD";
+    displayCur = validCur(cur);
     localStorage.setItem(LS_CUR, displayCur);
     syncCurButtons();
     if (state.user) renderAll();
@@ -117,7 +127,7 @@
   }
 
   function toCad(exp) {
-    return exp.currency === "EUR" ? exp.amount * state.data.eurToCad : exp.amount;
+    return exp.amount * rateOf(exp.currency);
   }
 
   function isTransfer(exp) {
@@ -156,7 +166,7 @@
     if (!confirmResolve) return;
     $("#confirm-modal").hidden = true;
     // ne pas rendre le scroll si la modale de dépense est encore ouverte dessous
-    document.body.style.overflow = $("#expense-modal").hidden && $("#plan-modal").hidden ? "" : "hidden";
+    document.body.style.overflow = $("#expense-modal").hidden && $("#plan-modal").hidden && $("#stop-modal").hidden ? "" : "hidden";
     var r = confirmResolve;
     confirmResolve = null;
     r(result);
@@ -187,6 +197,10 @@
       raw = { expenses: [], eurToCad: CFG.eurToCadDefault };
     }
     if (typeof raw.eurToCad !== "number" || !(raw.eurToCad > 0)) raw.eurToCad = CFG.eurToCadDefault;
+    if (typeof raw.usdToCad !== "number" || !(raw.usdToCad > 0)) raw.usdToCad = CFG.usdToCadDefault || 1.38;
+    if (!Array.isArray(raw.movies)) raw.movies = [];
+    if (!Array.isArray(raw.stops)) raw.stops = [];
+    if (!Array.isArray(raw.trips)) raw.trips = [];
     if (!Array.isArray(raw.challenges)) raw.challenges = [];
     if (!raw.wheel || typeof raw.wheel !== "object") raw.wheel = {};
     if (!Array.isArray(raw.cities)) raw.cities = [];
@@ -245,11 +259,14 @@
 
     cloud.refetchMeta = function () {
       return pb.collection("meta").getFullList({ sort: "created" }).then(function (recs) {
-        var chals = [], cities = [], hikes = [], wheel = {}, plans = [], shops = [];
+        var chals = [], cities = [], hikes = [], movies = [], stops = [], trips = [], wheel = {}, plans = [], shops = [];
         recs.forEach(function (r) {
           var d = r.data || {};
           if (r.kind === "challenge") chals.push({ id: r.id, text: d.text, createdBy: d.createdBy, createdAt: d.createdAt });
           else if (r.kind === "plan") plans.push(planFields(d, r.id));
+          else if (r.kind === "stop") stops.push(stopFields(d, r.id));
+          else if (r.kind === "trip") trips.push({ id: r.id, name: d.name, createdBy: d.createdBy, createdAt: d.createdAt });
+          else if (r.kind === "movie") movies.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "shoplist") shops.push({ id: r.id, name: d.name, items: d.items || [], createdAt: d.createdAt, finishedAt: d.finishedAt || null });
           else if (r.kind === "city") cities.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "hike") hikes.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
@@ -261,12 +278,20 @@
               var ri = $("#rate-input");
               if (ri) ri.value = d.eurToCad;
             }
+            if (typeof d.usdToCad === "number" && d.usdToCad > 0) {
+              state.data.usdToCad = d.usdToCad;
+              var ru = $("#rate-usd-input");
+              if (ru) ru.value = d.usdToCad;
+            }
           }
         });
-        chals.sort(sortByCreated); cities.sort(sortByCreated); hikes.sort(sortByCreated);
+        chals.sort(sortByCreated); cities.sort(sortByCreated); hikes.sort(sortByCreated); movies.sort(sortByCreated);
         state.data.challenges = chals;
         state.data.cities = cities;
         state.data.hikes = hikes;
+        state.data.movies = movies;
+        state.data.stops = stops;
+        state.data.trips = trips.sort(sortByCreated);
         state.data.wheel = wheel;
         state.data.plans = plans;
         state.data.shoplists = shops.sort(sortByCreated).reverse();
@@ -310,12 +335,12 @@
         .then(cloud.refetchMeta).catch(function () { toast("Tirage non enregistré", true); });
     };
     cloud.addWish = function (kind, it) {
-      var single = kind === "cities" ? "city" : "hike";
+      var single = { cities: "city", hikes: "hike", movies: "movie" }[kind];
       return pb.collection("meta").create({ kind: single, data: { name: it.name, addedBy: it.addedBy, createdAt: it.createdAt } })
         .then(cloud.refetchMeta).catch(function () { toast("Ajout échoué", true); });
     };
-    cloud.setRate = function (v) {
-      var data = { eurToCad: v };
+    cloud.setRate = function () {
+      var data = { eurToCad: state.data.eurToCad, usdToCad: state.data.usdToCad };
       var op = cloud.settingId
         ? pb.collection("meta").update(cloud.settingId, { data: data })
         : pb.collection("meta").create({ kind: "setting", data: data });
@@ -328,6 +353,25 @@
         ? pb.collection("meta").update(p.id, { data: data })
         : pb.collection("meta").create({ kind: "plan", data: data });
       return op.then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
+    };
+    cloud.saveStop = function (s, editing) {
+      var data = stopFields(s);
+      delete data.id;
+      var op = editing
+        ? pb.collection("meta").update(s.id, { data: data })
+        : pb.collection("meta").create({ kind: "stop", data: data });
+      return op.then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
+    };
+    // renvoie l'id du trajet créé (pour l'afficher tout de suite)
+    cloud.addTrip = function (t) {
+      return pb.collection("meta").create({ kind: "trip", data: { name: t.name, createdBy: t.createdBy, createdAt: t.createdAt } })
+        .then(function (rec) { return cloud.refetchMeta().then(function () { return rec.id; }); })
+        .catch(function () { toast("Création échouée", true); return null; });
+    };
+    // supprime plusieurs enregistrements meta d'un coup (trajet + ses étapes)
+    cloud.delMetas = function (ids) {
+      return Promise.all(ids.map(function (id) { return pb.collection("meta").delete(id); }))
+        .then(cloud.refetchMeta).catch(function () { toast("Suppression échouée", true); cloud.refetchMeta(); });
     };
 
     // ponytail: liste entière dans un seul enregistrement, deux modifs à la même seconde => la dernière gagne
@@ -776,7 +820,7 @@
     var m = member(exp.payerId);
     var cad = toCad(exp);
     // note secondaire : montant réellement saisi (dans sa devise d'origine)
-    var origFmt = exp.currency === "EUR" ? fmtEUR.format(exp.amount) : fmtCAD.format(exp.amount);
+    var origFmt = FMT[validCur(exp.currency)][0].format(exp.amount);
     var eurNote = origFmt + " saisi";
 
     var icon, meta;
@@ -809,13 +853,37 @@
     list.innerHTML = sorted.slice(0, 5).map(expenseRow).join("");
   }
 
+  // filtre de l'onglet Dépenses : "all", "transfer" ou un id de catégorie
+  var expFilter = "all";
+
+  function matchesFilter(e) {
+    if (expFilter === "all") return true;
+    if (expFilter === "transfer") return isTransfer(e);
+    return !isTransfer(e) && category(e.category).id === expFilter;
+  }
+
+  function renderExpenseFilter() {
+    var box = $("#exp-filter");
+    var opts = [{ id: "all", name: "Tout", icon: "" }].concat(CATEGORIES, [{ id: "transfer", name: "Remboursements", icon: TRANSFER_ICON }]);
+    box.innerHTML = opts.map(function (o) {
+      return '<button type="button" class="filter-chip' + (o.id === expFilter ? " active" : "") + '" data-filter="' + o.id + '">' +
+        o.icon + "<span>" + esc(o.name) + "</span></button>";
+    }).join("");
+  }
+
   function renderExpenseGroups() {
     var box = $("#expense-groups");
-    var sorted = state.data.expenses.slice().sort(function (a, b) {
+    renderExpenseFilter();
+    var sorted = state.data.expenses.filter(matchesFilter).sort(function (a, b) {
       return (b.date + (b.createdAt || "")).localeCompare(a.date + (a.createdAt || ""));
     });
+    var sum = $("#exp-filter-sum");
+    sum.hidden = expFilter === "all" || !sorted.length;
+    sum.textContent = sorted.length + " ligne" + (sorted.length > 1 ? "s" : "") + " · " + M(sorted.reduce(function (s, e) { return s + toCad(e); }, 0));
     if (!sorted.length) {
-      box.innerHTML = '<div class="card"><p class="empty-state"><strong>Aucune dépense</strong>Clique sur « Ajouter » pour lancer les comptes.</p></div>';
+      box.innerHTML = expFilter === "all"
+        ? '<div class="card"><p class="empty-state"><strong>Aucune dépense</strong>Clique sur « Ajouter » pour lancer les comptes.</p></div>'
+        : '<div class="card"><p class="empty-state">Rien dans cette catégorie.</p></div>';
       return;
     }
     var groups = {};
@@ -1049,7 +1117,7 @@
         b.classList.toggle("active", b.dataset.cur === "CAD");
       });
       hint.textContent = n + " dépense(s) · total " + fmtCAD.format(totalCad)
-        + (displayCur === "EUR" ? " (" + fmtEUR.format(totalCad / state.data.eurToCad) + ")" : "");
+        + (displayCur !== "CAD" ? " (" + M(totalCad) + ")" : "");
     } else {
       hint.textContent = "Coche des dépenses pour calculer le montant, ou saisis-le à la main.";
     }
@@ -1640,12 +1708,439 @@
   function renderAgency() {
     renderWishList("cities", "#city-list", "Aucune ville pour l'instant. Ajoute la première envie !");
     renderWishList("hikes", "#hike-list", "Aucune rando notée. Balance tes idées de sentiers !");
+    renderWishList("movies", "#movie-list", "Aucun film noté. Ajoute le premier pour la prochaine soirée !", FILM_ICON);
+    renderStops();
   }
 
   var WISH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
+  var FILM_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M2 16h5M17 8h5M17 16h5M2 12h20"/></svg>';
   var TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
-  function renderWishList(kind, sel, emptyMsg) {
+  /* ================= Itinéraire (carte Canada / USA) =================
+     Étapes et hôtels dans `meta` (kind "stop"). Carte Leaflet + fond OpenStreetMap,
+     adresses via Nominatim (OpenStreetMap), trajets routiers via OSRM. */
+
+  var IT = window.CaribouItin;
+  var tripMap = null, mapLayers = null, routeCache = {};
+  var stopEd = { id: null, type: "step", via: "road", lat: null, lng: null };
+  var NOMINATIM = "https://nominatim.openstreetmap.org/";
+
+  function stopFields(d, id) {
+    return {
+      id: id || d.id, type: d.type === "hotel" ? "hotel" : "step", via: d.via === "plane" ? "plane" : "road",
+      name: d.name || "", address: d.address || "", lat: +d.lat, lng: +d.lng,
+      from: d.from || "", to: d.to || "", trip: d.trip || DEFAULT_TRIP, createdBy: d.createdBy, createdAt: d.createdAt
+    };
+  }
+
+  /* ---- Plusieurs trajets (Calgary, Miami…) : une carte par trajet ----
+     Les étapes d'avant (sans trajet) vont dans un trajet « Premier trajet » virtuel. */
+  var DEFAULT_TRIP = "default";
+  var LS_TRIP = "caribou_trip";
+  var curTrip = null;
+  try { curTrip = localStorage.getItem(LS_TRIP); } catch (e) { /* stockage bloqué */ }
+
+  function tripList() {
+    var trips = state.data.trips.slice();
+    var ids = trips.map(function (t) { return t.id; });
+    var orphans = state.data.stops.some(function (s) { return ids.indexOf(s.trip) < 0; });
+    if (orphans || !trips.length) trips.unshift({ id: DEFAULT_TRIP, name: trips.length ? "Premier trajet" : "Mon trajet" });
+    return trips;
+  }
+
+  function activeTrip() {
+    var list = tripList();
+    return list.filter(function (t) { return t.id === curTrip; })[0] || list[0];
+  }
+
+  // étapes du trajet affiché (celles d'un trajet disparu tombent dans le trajet par défaut)
+  function tripStops() {
+    var t = activeTrip(), ids = state.data.trips.map(function (x) { return x.id; });
+    return state.data.stops.filter(function (s) {
+      return t.id === DEFAULT_TRIP ? ids.indexOf(s.trip) < 0 : s.trip === t.id;
+    });
+  }
+
+  function selectTrip(id) {
+    curTrip = id;
+    try { localStorage.setItem(LS_TRIP, id); } catch (e) { /* ignoré */ }
+    if (tripMap) tripMap.closePopup();
+    renderStops(true);
+  }
+
+  function renderTripTabs() {
+    var cur = activeTrip();
+    $("#trip-tabs").innerHTML = tripList().map(function (t) {
+      return '<button type="button" class="filter-chip' + (t.id === cur.id ? " active" : "") + '" data-trip="' + esc(t.id) + '">' + esc(t.name) + "</button>";
+    }).join("") + '<button type="button" class="filter-chip trip-new-btn" id="trip-new-btn">+ Nouveau trajet</button>';
+  }
+
+  function createTrip(name) {
+    var t = { id: uid(), name: name, createdBy: state.user.id, createdAt: new Date().toISOString() };
+    if (cloud) {
+      cloud.addTrip(t).then(function (id) { if (id) selectTrip(id); });
+    } else {
+      state.data.trips.push(t);
+      saveData();
+      selectTrip(t.id);
+    }
+    toast("Trajet « " + name + " » créé");
+  }
+
+  function deleteTrip() {
+    var t = activeTrip(), stops = tripStops();
+    askConfirm({
+      title: "Supprimer « " + t.name + " » ?",
+      message: stops.length ? "Ses " + stops.length + " étape(s) disparaîtront aussi, pour tout le monde." : "Le trajet est vide.",
+      confirmLabel: "Supprimer"
+    }).then(function (ok) {
+      if (!ok) return;
+      var ids = stops.map(function (s) { return s.id; }).concat(t.id === DEFAULT_TRIP ? [] : [t.id]);
+      if (cloud) cloud.delMetas(ids);
+      else {
+        state.data.stops = state.data.stops.filter(function (s) { return ids.indexOf(s.id) < 0; });
+        state.data.trips = state.data.trips.filter(function (x) { return x.id !== t.id; });
+        saveData();
+      }
+      curTrip = null;
+      renderStops(true);
+      toast("Trajet supprimé");
+    });
+  }
+
+  function findStop(id) { return state.data.stops.filter(function (x) { return x.id === id; })[0]; }
+  function stopRange(s) { return !s.from ? "" : !s.to || s.to === s.from ? dm(s.from) : dm(s.from) + " → " + dm(s.to); }
+
+  function initTripMap() {
+    var el = $("#trip-map");
+    if (tripMap || typeof L === "undefined" || !el || !el.offsetWidth) return; // onglet caché : on attend
+    tripMap = L.map(el, { zoomControl: false, worldCopyJump: true });
+    L.control.zoom({ position: "bottomright" }).addTo(tripMap);
+    // fond vectoriel style Google Maps (OpenFreeMap, sans clé) ; repli sur les tuiles OSM classiques
+    if (L.maplibreGL && window.maplibregl) {
+      L.maplibreGL({
+        style: "https://tiles.openfreemap.org/styles/liberty",
+        attribution: '&copy; <a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(tripMap);
+    } else {
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(tripMap);
+    }
+    mapLayers = L.layerGroup().addTo(tripMap);
+    tripMap.on("click", function (e) { openStopModal(null, { lat: e.latlng.lat, lng: e.latlng.lng }, true); });
+    // les popups Leaflet bloquent la propagation des clics : on branche "Modifier" à l'ouverture
+    tripMap.on("popupopen", function (e) {
+      var a = e.popup.getElement().querySelector("[data-stop-edit]");
+      if (a) a.onclick = function (ev) {
+        ev.preventDefault();
+        var s = findStop(a.dataset.stopEdit);
+        if (s) openStopModal(s);
+      };
+    });
+    renderTripMap(true);
+  }
+
+  // leg[i] = trajet de stops[i-1] à stops[i] : { km, h, plane } (h absent = pas encore calculé)
+  function stopLegs(stops) {
+    var legs = [];
+    for (var i = 1; i < stops.length; i++) {
+      legs[i] = { km: IT.km(stops[i - 1], stops[i]), plane: stops[i].via === "plane", approx: true };
+    }
+    IT.roadRuns(stops).forEach(function (run) {
+      var r = routeCache[runKey(stops, run)];
+      if (!r || !r.legs) return;
+      r.legs.forEach(function (l, j) { legs[run[j + 1]] = { km: l.km, h: l.h, plane: false }; });
+    });
+    return legs;
+  }
+
+  function runKey(stops, run) {
+    return run.map(function (i) { return stops[i].lng.toFixed(5) + "," + stops[i].lat.toFixed(5); }).join(";");
+  }
+
+  // un appel OSRM par groupe d'étapes reliées par la route, mis en cache
+  function fetchRoute(key) {
+    routeCache[key] = { pending: true };
+    fetch("https://router.project-osrm.org/route/v1/driving/" + key + "?overview=full&geometries=geojson")
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var rt = j.routes && j.routes[0];
+        if (!rt) throw new Error(j.code);
+        routeCache[key] = {
+          geo: rt.geometry.coordinates.map(function (c) { return [c[1], c[0]]; }),
+          legs: rt.legs.map(function (l) { return { km: l.distance / 1000, h: l.duration / 3600 }; })
+        };
+      })
+      .catch(function () { routeCache[key] = { failed: true }; })
+      .then(function () { renderStops(); });
+  }
+
+  function renderTripMap(fit) {
+    if (!tripMap) return;
+    var stops = IT.sortStops(tripStops());
+    mapLayers.clearLayers();
+
+    // vols : ligne pointillée ; route : tracé OSRM (ligne droite tant qu'il n'est pas arrivé)
+    for (var i = 1; i < stops.length; i++) {
+      if (stops[i].via === "plane") {
+        L.polyline([[stops[i - 1].lat, stops[i - 1].lng], [stops[i].lat, stops[i].lng]], { color: "#5F6368", weight: 3, dashArray: "1 8", lineCap: "round", opacity: 0.9 }).addTo(mapLayers);
+      }
+    }
+    // tracé façon Google Maps : bleu avec liseré foncé
+    IT.roadRuns(stops).forEach(function (run) {
+      var key = runKey(stops, run), r = routeCache[key];
+      if (!r) fetchRoute(key);
+      var line = r && r.geo ? r.geo : run.map(function (i) { return [stops[i].lat, stops[i].lng]; });
+      if (r && r.geo) {
+        L.polyline(line, { color: "#1967D2", weight: 8, opacity: 1, lineJoin: "round" }).addTo(mapLayers);
+        L.polyline(line, { color: "#4285F4", weight: 5, opacity: 1, lineJoin: "round" }).addTo(mapLayers);
+      } else {
+        L.polyline(line, { color: "#4285F4", weight: 4, opacity: 0.6, dashArray: "6 8" }).addTo(mapLayers);
+      }
+    });
+
+    var n = 0;
+    stops.forEach(function (s) {
+      if (s.type !== "hotel") n++;
+      // épingle en goutte (pointe = position exacte)
+      var icon = L.divIcon({ className: "", iconSize: [32, 42], iconAnchor: [16, 41], popupAnchor: [0, -38],
+        html: '<span class="gpin type-' + s.type + '"><b>' + (s.type === "hotel" ? "H" : n) + "</b></span>" });
+      var popup = "<strong>" + esc(s.name) + "</strong>" +
+        (s.address ? "<br>" + esc(s.address) : "") + (s.from ? "<br><em>" + esc(stopRange(s)) + "</em>" : "") +
+        '<br><a href="' + esc(IT.gmapsPlace(s)) + '" target="_blank" rel="noopener">Google Maps</a> · ' +
+        '<a href="#" data-stop-edit="' + esc(s.id) + '">Modifier</a>';
+      L.marker([s.lat, s.lng], { icon: icon, draggable: true, title: s.name, zIndexOffset: s.type === "hotel" ? 0 : 100 })
+        .bindPopup(popup)
+        .on("dragend", function (e) {
+          var p = e.target.getLatLng(), c = stopFields(s);
+          c.lat = p.lat; c.lng = p.lng;
+          saveStop(c, true);
+          toast("Position de « " + s.name + " » mise à jour");
+        })
+        .addTo(mapLayers);
+    });
+
+    if (fit) {
+      if (stops.length) tripMap.fitBounds(stops.map(function (s) { return [s.lat, s.lng]; }), { padding: [40, 40], maxZoom: 11 });
+      else tripMap.fitBounds([[25, -125], [60, -60]]); // Canada + USA
+    }
+  }
+
+  function renderStops(fit) {
+    var list = $("#stop-list");
+    if (!list || !IT) return;
+    renderTripTabs();
+    var stops = IT.sortStops(tripStops()), legs = stopLegs(stops);
+    renderTripMap(fit === true);
+
+    var gm = $("#route-gmaps");
+    gm.hidden = stops.length < 2;
+    gm.href = IT.gmapsDir(stops);
+
+    var road = 0, roadH = 0, air = 0, pending = false;
+    legs.forEach(function (l) {
+      if (!l) return;
+      if (l.plane) air += l.km;
+      else { road += l.km; roadH += l.h || 0; if (l.approx) pending = true; }
+    });
+    $("#route-total").textContent = stops.length < 2 ? "" :
+      (road ? "Route : " + Math.round(road).toLocaleString("fr-FR") + " km" + (pending ? " (à vol d'oiseau)" : " · " + IT.hours(roadH) + " de conduite") : "") +
+      (road && air ? " · " : "") + (air ? "Avion : " + Math.round(air).toLocaleString("fr-FR") + " km" : "");
+
+    if (!stops.length) {
+      list.innerHTML = '<li class="empty-state">Aucune étape. Touche la carte ou cherche une adresse pour commencer le trajet.</li>';
+      return;
+    }
+    var n = 0;
+    list.innerHTML = stops.map(function (s, i) {
+      var l = legs[i], leg = "";
+      if (l) {
+        leg = '<li class="stop-leg">' + (l.plane ? "✈ " : "↓ ") + Math.round(l.km).toLocaleString("fr-FR") + " km" +
+          (l.plane ? " en avion" : l.approx ? " à vol d'oiseau" : " · " + IT.hours(l.h) + " de route") + "</li>";
+      }
+      if (s.type !== "hotel") n++;
+      return leg + '<li><div class="plan-item stop-item" data-stop="' + esc(s.id) + '" role="button" tabindex="0">' +
+        '<span class="map-pin type-' + s.type + '">' + (s.type === "hotel" ? "H" : n) + "</span>" +
+        '<span class="plan-item-main"><strong>' + esc(s.name) + "</strong>" +
+        "<span>" + esc([stopRange(s), s.address].filter(Boolean).join(" · ") || "Pas d'adresse") + "</span></span>" +
+        '<a class="btn-ghost btn-xs" href="' + esc(IT.gmapsPlace(s)) + '" target="_blank" rel="noopener">Maps</a></div></li>';
+    }).join("");
+  }
+
+  function openStopModal(s, preset, reverse) {
+    preset = preset || {};
+    var d = s || preset;
+    stopEd.id = s ? s.id : null;
+    stopEd.type = d.type === "hotel" ? "hotel" : "step";
+    stopEd.via = d.via === "plane" ? "plane" : "road";
+    stopEd.lat = d.lat; stopEd.lng = d.lng;
+    $("#stop-modal-title").textContent = s ? "Modifier l'étape" : "Nouvelle étape";
+    $("#stop-name").value = d.name || "";
+    $("#stop-address").value = d.address || "";
+    $("#stop-from").value = d.from || "";
+    $("#stop-to").value = d.to || "";
+    $("#stop-delete").hidden = !s;
+    $("#stop-error").hidden = true;
+    syncStopModal();
+    $("#stop-modal").hidden = false;
+    document.body.style.overflow = "hidden";
+    if (tripMap) tripMap.closePopup();
+
+    // clic sur la carte : on devine l'adresse du point
+    if (reverse) {
+      fetch(NOMINATIM + "reverse?format=jsonv2&accept-language=fr&lat=" + d.lat + "&lon=" + d.lng)
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if ($("#stop-modal").hidden || stopEd.id || stopEd.lat !== d.lat) return;
+          var a = j.address || {};
+          if (!$("#stop-address").value && j.display_name) $("#stop-address").value = j.display_name;
+          if (!$("#stop-name").value) $("#stop-name").value = j.name || a.city || a.town || a.village || a.county || "";
+        })
+        .catch(function () {});
+    }
+  }
+
+  function syncStopModal() {
+    $all("#stop-type .seg-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.type === stopEd.type); });
+    $all("#stop-via .seg-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.via === stopEd.via); });
+    $("#stop-name").placeholder = stopEd.type === "hotel" ? "Hôtel Le Germain" : "Banff";
+    $("#stop-from-label").textContent = stopEd.type === "hotel" ? "Arrivée" : "Le";
+    $("#stop-to-label").textContent = stopEd.type === "hotel" ? "Départ" : "Jusqu'au (facultatif)";
+  }
+
+  function closeStopModal() {
+    $("#stop-modal").hidden = true;
+    document.body.style.overflow = "";
+    stopEd.id = null;
+  }
+
+  function saveStop(s, editing) {
+    if (cloud) {
+      cloud.saveStop(s, editing);
+    } else {
+      state.data.stops = state.data.stops.filter(function (x) { return x.id !== s.id; }).concat([s]);
+      saveData();
+      renderStops();
+    }
+  }
+
+  function submitStop(e) {
+    e.preventDefault();
+    var name = $("#stop-name").value.trim(), from = $("#stop-from").value, to = $("#stop-to").value;
+    var err = !name ? "Donne un nom à l'étape."
+      : to && !from ? "Indique aussi la date d'arrivée."
+      : to && to < from ? "La date de départ est avant l'arrivée." : null;
+    if (err) {
+      $("#stop-error").textContent = err;
+      $("#stop-error").hidden = false;
+      return;
+    }
+    var existing = stopEd.id ? findStop(stopEd.id) : null;
+    saveStop(stopFields({
+      type: stopEd.type, via: stopEd.via, name: name, address: $("#stop-address").value.trim(),
+      lat: stopEd.lat, lng: stopEd.lng, from: from, to: to,
+      trip: existing ? existing.trip : activeTrip().id,
+      createdBy: existing ? existing.createdBy : state.user.id,
+      createdAt: existing ? existing.createdAt : new Date().toISOString()
+    }, existing ? existing.id : uid()), !!existing);
+    closeStopModal();
+    toast(existing ? "Étape modifiée" : "Étape ajoutée au trajet");
+  }
+
+  function deleteStop() {
+    var id = stopEd.id;
+    askConfirm({ title: "Supprimer cette étape ?", message: "Elle disparaîtra du trajet de tout le monde.", confirmLabel: "Supprimer" })
+      .then(function (ok) {
+        if (!ok) return;
+        if (cloud) cloud.delMeta(id);
+        else {
+          state.data.stops = state.data.stops.filter(function (x) { return x.id !== id; });
+          saveData();
+          renderStops();
+        }
+        closeStopModal();
+        toast("Étape supprimée");
+      });
+  }
+
+  function searchPlaces(q) {
+    var box = $("#stop-results");
+    box.hidden = false;
+    box.innerHTML = '<li class="stop-res-empty">Recherche…</li>';
+    fetch(NOMINATIM + "search?format=jsonv2&limit=6&countrycodes=ca,us&accept-language=fr&q=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.length) { box.innerHTML = '<li class="stop-res-empty">Rien trouvé au Canada ou aux USA. Essaie avec la ville.</li>'; return; }
+        box.innerHTML = res.map(function (r, i) {
+          return '<li><button type="button" class="stop-res" data-i="' + i + '"><strong>' + esc(r.name || r.display_name.split(",")[0]) +
+            "</strong><span>" + esc(r.display_name) + "</span></button></li>";
+        }).join("");
+        box.onclick = function (e) {
+          var b = e.target.closest(".stop-res");
+          if (!b) return;
+          var r = res[+b.dataset.i];
+          box.hidden = true;
+          $("#stop-q").value = "";
+          if (tripMap) tripMap.setView([+r.lat, +r.lon], 12);
+          openStopModal(null, {
+            lat: +r.lat, lng: +r.lon, name: r.name || r.display_name.split(",")[0], address: r.display_name,
+            type: /hotel|motel|hostel|guest_house|apartment/.test(r.type) ? "hotel" : "step"
+          });
+        };
+      })
+      .catch(function () { box.innerHTML = '<li class="stop-res-empty">Recherche indisponible, réessaie dans un instant.</li>'; });
+  }
+
+  function bindStops() {
+    $("#trip-tabs").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-trip]");
+      if (b) { selectTrip(b.dataset.trip); return; }
+      if (e.target.closest("#trip-new-btn")) {
+        $("#trip-form").hidden = false;
+        $("#trip-name").focus();
+      }
+    });
+    $("#trip-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = $("#trip-name").value.trim();
+      if (!v) return;
+      createTrip(v);
+      $("#trip-name").value = "";
+      $("#trip-form").hidden = true;
+    });
+    $("#trip-cancel").addEventListener("click", function () { $("#trip-form").hidden = true; });
+    $("#trip-delete").addEventListener("click", deleteTrip);
+    $("#stop-search").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var q = $("#stop-q").value.trim();
+      if (q) searchPlaces(q);
+    });
+    $all("#stop-type .seg-btn").forEach(function (b) {
+      b.addEventListener("click", function () { stopEd.type = b.dataset.type; syncStopModal(); });
+    });
+    $all("#stop-via .seg-btn").forEach(function (b) {
+      b.addEventListener("click", function () { stopEd.via = b.dataset.via; syncStopModal(); });
+    });
+    $("#stop-form").addEventListener("submit", submitStop);
+    $("#stop-delete").addEventListener("click", deleteStop);
+    $("#stop-modal-close").addEventListener("click", closeStopModal);
+    $("#stop-modal").addEventListener("click", function (e) { if (e.target === $("#stop-modal")) closeStopModal(); });
+    function onItem(e) {
+      if (e.type === "keydown" && e.key !== "Enter") return;
+      if (e.target.closest("a")) return; // lien Maps
+      var el = e.target.closest("[data-stop]");
+      var s = el && findStop(el.dataset.stop);
+      if (!s) return;
+      if (tripMap) tripMap.setView([s.lat, s.lng], Math.max(tripMap.getZoom(), 11));
+      openStopModal(s);
+    }
+    $("#stop-list").addEventListener("click", onItem);
+    $("#stop-list").addEventListener("keydown", onItem);
+  }
+
+  function renderWishList(kind, sel, emptyMsg, icon) {
     var list = $(sel);
     if (!list) return;
     var items = state.data[kind];
@@ -1654,7 +2149,7 @@
       return;
     }
     list.innerHTML = items.map(function (it) {
-      return '<li class="wish-item"><span class="wish-ico">' + WISH_ICON + "</span>" +
+      return '<li class="wish-item"><span class="wish-ico">' + (icon || WISH_ICON) + "</span>" +
         '<span class="wish-name">' + esc(it.name) + "</span>" +
         '<span class="wish-by">' + esc(member(it.addedBy).name) + "</span>" +
         '<button type="button" class="icon-btn wish-del" data-kind="' + kind + '" data-id="' + it.id + '" aria-label="Supprimer">' + TRASH_ICON + "</button></li>";
@@ -2124,6 +2619,7 @@
     $("#trip-chip").textContent = CFG.tripName;
     $("#user-chip").innerHTML = avatarDot(state.user) + "<span>" + esc(state.user.name) + "</span>";
     $("#rate-input").value = state.data.eurToCad;
+    $("#rate-usd-input").value = state.data.usdToCad;
     syncCurButtons();
 
     renderAll();
@@ -2175,6 +2671,7 @@
       if (!$("#confirm-modal").hidden) closeConfirm(false);
       else if (!$("#expense-modal").hidden) closeModal();
       else if (!$("#plan-modal").hidden) closePlanModal();
+      else if (!$("#stop-modal").hidden) closeStopModal();
     });
     $("#expense-form").addEventListener("submit", submitExpense);
     $("#exp-delete").addEventListener("click", deleteExpense);
@@ -2233,16 +2730,19 @@
     });
 
     // Réglages
-    $("#rate-input").addEventListener("change", function () {
-      var v = parseFloat(this.value);
-      if (v > 0) {
-        state.data.eurToCad = v;
+    function bindRate(sel, key, label) {
+      $(sel).addEventListener("change", function () {
+        var v = parseFloat(this.value);
+        if (!(v > 0)) return;
+        state.data[key] = v;
         saveData();
-        if (cloud) cloud.setRate(v);
+        if (cloud) cloud.setRate();
         renderAll();
-        toast("Taux mis à jour : 1 € = " + v + " $ CAD");
-      }
-    });
+        toast("Taux mis à jour : " + label + " = " + v + " $ CAD");
+      });
+    }
+    bindRate("#rate-input", "eurToCad", "1 €");
+    bindRate("#rate-usd-input", "usdToCad", "1 $ US");
     $("#export-xlsx-btn").addEventListener("click", exportExcel);
 
     // Roue des défis
@@ -2271,6 +2771,20 @@
       e.preventDefault();
       var v = $("#hike-input").value.trim();
       if (v) { wishAdd("hikes", v); $("#hike-input").value = ""; }
+    });
+    $("#movie-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = $("#movie-input").value.trim();
+      if (v) { wishAdd("movies", v); $("#movie-input").value = ""; }
+    });
+    bindStops();
+
+    // Filtre des dépenses par catégorie
+    $("#exp-filter").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-filter]");
+      if (!b) return;
+      expFilter = b.dataset.filter;
+      renderExpenseGroups();
     });
     document.addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest(".wish-del") : null;
@@ -2309,6 +2823,10 @@
     $all(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     tabTrail = tabTrail.concat(name).slice(-3);
     if (name === "agenda") renderAgenda();
+    if (name === "voyage") {
+      initTripMap();
+      if (tripMap) tripMap.invalidateSize();
+    }
     if (name === "tips") {
       buildTipsDisc();
       renderTipsHistory();

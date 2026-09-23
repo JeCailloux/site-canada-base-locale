@@ -18,6 +18,8 @@ window.CARIBOU_CONFIG = {
 
   // Taux par défaut : 1 EUR = X CAD (modifiable ensuite dans Réglages)
   eurToCadDefault: 1.48,
+  // 1 USD = X CAD
+  usdToCadDefault: 1.38,
 
   // ---- ROUE DES DÉFIS ----
   // Poids de chaque compte dans le tirage quotidien (total libre).
