@@ -70,7 +70,7 @@ Vérif des calculs de dates : `node tests/planning.test.js`
 
 Carte Canada / USA (Leaflet + OpenStreetMap) : on touche la carte ou on cherche une adresse
 (Nominatim) pour ajouter une étape ou un hôtel (nom, adresse, dates, arrivée en voiture ou en avion).
-Les étapes se relient dans l'ordre des dates ; les trajets en voiture suivent la route (OSRM) avec
+Les étapes se relient dans l'ordre des dates (heures facultatives), ou dans l'ordre choisi en glissant les numéros de la liste ; les trajets en voiture suivent la route (OSRM) avec
 km et temps de conduite, les vols sont en pointillés. Lien « Ouvrir dans Google Maps » pour tout le trajet.
 Plusieurs trajets possibles (Calgary, Miami…), chacun sur sa carte : on choisit le trajet en haut de la carte.
 Les trajets et étapes vivent dans la table `meta` (`kind` = `trip` / `stop`).
@@ -79,7 +79,12 @@ Vérif des calculs : `node tests/itineraire.test.js`
 
 ## Films
 
-Onglet **Films** : wish list de films (`meta`, `kind` = `movie`).
+Onglet **Films** : wish list de films + films vus notés sur 10 par chacun (`meta`, `kind` = `movie`, champs `seen` / `ratings`).
+
+## Events
+
+Onglet **Events** : chacun ajoute des events (150 caractères max) et les classe à sa façon
+en glissant les numéros. Events : `meta` `kind` = `event` ; classements : `kind` = `eventrank` (un par personne).
 
 ## Mr. White
 

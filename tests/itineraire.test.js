@@ -8,6 +8,12 @@ const s = (id, from, extra) => Object.assign({ id, lat: 45, lng: -73, from, crea
 const sorted = I.sortStops([s("c", ""), s("b", "2026-10-02"), s("a2", "2026-10-01"), s("a1", "2026-10-01"), s("x", "2026-09-01", { lat: NaN })]);
 assert.deepStrictEqual(sorted.map((x) => x.id), ["a1", "a2", "b", "c"]);
 
+// même jour : l'heure départage ; ordre manuel (glisser-déposer) prioritaire, sans ordre à la fin
+const byTime = I.sortStops([s("soir", "2026-10-01", { fromTime: "18:00" }), s("matin", "2026-10-01", { fromTime: "08:30" })]);
+assert.deepStrictEqual(byTime.map((x) => x.id), ["matin", "soir"]);
+const manual = I.sortStops([s("a", "2026-10-01", { order: 1 }), s("b", "2026-10-05", { order: 0 }), s("new", "2026-09-01")]);
+assert.deepStrictEqual(manual.map((x) => x.id), ["b", "a", "new"]);
+
 // groupes routiers : un vol coupe le trajet
 const st = [s(0), s(1), s(2, "", { via: "plane" }), s(3), s(4, "", { via: "plane" })];
 assert.deepStrictEqual(I.roadRuns(st), [[0, 1], [2, 3]]);

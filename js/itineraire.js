@@ -10,10 +10,13 @@
     return typeof s.lat === "number" && typeof s.lng === "number" && isFinite(s.lat) && isFinite(s.lng);
   }
 
-  // Ordre du trajet : date d'arrivée, puis ordre d'ajout ; sans date = à la fin
+  // Ordre du trajet : ordre choisi à la main (glisser-déposer) d'abord,
+  // puis date + heure d'arrivée, puis ordre d'ajout ; sans date = à la fin
   function sortStops(stops) {
     return stops.filter(hasPos).sort(function (a, b) {
-      var da = a.from || "9999", db = b.from || "9999";
+      var oa = typeof a.order === "number" ? a.order : Infinity, ob = typeof b.order === "number" ? b.order : Infinity;
+      if (oa !== ob) return oa < ob ? -1 : 1;
+      var da = (a.from || "9999") + (a.fromTime || ""), db = (b.from || "9999") + (b.fromTime || "");
       if (da !== db) return da < db ? -1 : 1;
       return (a.createdAt || "").localeCompare(b.createdAt || "");
     });

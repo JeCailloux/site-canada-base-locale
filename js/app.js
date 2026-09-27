@@ -188,6 +188,43 @@
     return '<span class="' + (cls || "avatar-dot") + '" style="background:' + m.color + '">' + esc(initials(m.name)) + "</span>";
   }
 
+  /* ---------- Glisser-déposer (doigt ou souris) ----------
+     On attrape la poignée (.drag-handle) d'une ligne `rowSel` de `list`, on lâche sur une autre :
+     onDrop(from, to) reçoit les index de départ et d'arrivée parmi les lignes. */
+  function dragSort(list, rowSel, onDrop) {
+    list.addEventListener("pointerdown", function (e) {
+      var h = e.target.closest(".drag-handle");
+      var row = h && h.closest(rowSel);
+      if (!row || !list.contains(row) || (e.pointerType === "mouse" && e.button !== 0)) return;
+      var rows = Array.prototype.slice.call(list.querySelectorAll(rowSel));
+      var from = rows.indexOf(row), to = from;
+      e.preventDefault();
+      h.setPointerCapture(e.pointerId);
+      row.classList.add("dragging");
+
+      function clearMarks() { rows.forEach(function (r) { r.classList.remove("drop-before", "drop-after"); }); }
+      function move(ev) {
+        to = 0;
+        rows.forEach(function (r, i) { if (ev.clientY > r.getBoundingClientRect().top) to = i; });
+        clearMarks();
+        if (to !== from) rows[to].classList.add(to < from ? "drop-before" : "drop-after");
+      }
+      function end(ev) {
+        h.removeEventListener("pointermove", move);
+        h.removeEventListener("pointerup", end);
+        h.removeEventListener("pointercancel", end);
+        clearMarks();
+        row.classList.remove("dragging");
+        if (ev.type === "pointerup" && to !== from) onDrop(from, to);
+      }
+      h.addEventListener("pointermove", move);
+      h.addEventListener("pointerup", end);
+      h.addEventListener("pointercancel", end);
+    });
+    // un simple appui sur la poignée n'ouvre pas la ligne
+    list.addEventListener("click", function (e) { if (e.target.closest(".drag-handle")) e.stopPropagation(); }, true);
+  }
+
   /* ================= Stockage ================= */
 
   function loadData() {
@@ -207,6 +244,8 @@
     if (!Array.isArray(raw.hikes)) raw.hikes = [];
     if (!Array.isArray(raw.plans)) raw.plans = [];
     if (!Array.isArray(raw.shoplists)) raw.shoplists = [];
+    if (!Array.isArray(raw.events)) raw.events = [];
+    if (!raw.eventRanks || typeof raw.eventRanks !== "object") raw.eventRanks = {};
     state.data = raw;
   }
 
@@ -259,14 +298,16 @@
 
     cloud.refetchMeta = function () {
       return pb.collection("meta").getFullList({ sort: "created" }).then(function (recs) {
-        var chals = [], cities = [], hikes = [], movies = [], stops = [], trips = [], wheel = {}, plans = [], shops = [];
+        var chals = [], cities = [], hikes = [], movies = [], stops = [], trips = [], wheel = {}, plans = [], shops = [], events = [], ranks = {};
         recs.forEach(function (r) {
           var d = r.data || {};
           if (r.kind === "challenge") chals.push({ id: r.id, text: d.text, createdBy: d.createdBy, createdAt: d.createdAt });
           else if (r.kind === "plan") plans.push(planFields(d, r.id));
           else if (r.kind === "stop") stops.push(stopFields(d, r.id));
           else if (r.kind === "trip") trips.push({ id: r.id, name: d.name, createdBy: d.createdBy, createdAt: d.createdAt });
-          else if (r.kind === "movie") movies.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
+          else if (r.kind === "movie") movies.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt, seen: !!d.seen, ratings: d.ratings || {} });
+          else if (r.kind === "event") events.push({ id: r.id, text: d.text, addedBy: d.addedBy, createdAt: d.createdAt });
+          else if (r.kind === "eventrank" && d.user) ranks[d.user] = { id: r.id, order: d.order || [] };
           else if (r.kind === "shoplist") shops.push({ id: r.id, name: d.name, items: d.items || [], createdAt: d.createdAt, finishedAt: d.finishedAt || null });
           else if (r.kind === "city") cities.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
           else if (r.kind === "hike") hikes.push({ id: r.id, name: d.name, addedBy: d.addedBy, createdAt: d.createdAt });
@@ -290,6 +331,8 @@
         state.data.cities = cities;
         state.data.hikes = hikes;
         state.data.movies = movies;
+        state.data.events = events.sort(sortByCreated);
+        state.data.eventRanks = ranks;
         state.data.stops = stops;
         state.data.trips = trips.sort(sortByCreated);
         state.data.wheel = wheel;
@@ -336,8 +379,27 @@
     };
     cloud.addWish = function (kind, it) {
       var single = { cities: "city", hikes: "hike", movies: "movie" }[kind];
-      return pb.collection("meta").create({ kind: single, data: { name: it.name, addedBy: it.addedBy, createdAt: it.createdAt } })
+      var data = { name: it.name, addedBy: it.addedBy, createdAt: it.createdAt };
+      if (kind === "movies") { data.seen = it.seen; data.ratings = it.ratings; }
+      return pb.collection("meta").create({ kind: single, data: data })
         .then(cloud.refetchMeta).catch(function () { toast("Ajout échoué", true); });
+    };
+    // ponytail: notes de tous dans un seul enregistrement, deux notes à la même seconde => la dernière gagne
+    cloud.saveMovie = function (m) {
+      return pb.collection("meta").update(m.id, { data: { name: m.name, addedBy: m.addedBy, createdAt: m.createdAt, seen: !!m.seen, ratings: m.ratings || {} } })
+        .then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
+    };
+    cloud.addEvent = function (ev) {
+      return pb.collection("meta").create({ kind: "event", data: { text: ev.text, addedBy: ev.addedBy, createdAt: ev.createdAt } })
+        .then(cloud.refetchMeta).catch(function () { toast("Ajout échoué", true); });
+    };
+    // un enregistrement de classement par personne
+    cloud.saveRank = function (user, order, id) {
+      var data = { user: user, order: order };
+      var op = id
+        ? pb.collection("meta").update(id, { data: data })
+        : pb.collection("meta").create({ kind: "eventrank", data: data });
+      return op.then(cloud.refetchMeta).catch(function () { toast("Classement non enregistré", true); });
     };
     cloud.setRate = function () {
       var data = { eurToCad: state.data.eurToCad, usdToCad: state.data.usdToCad };
@@ -562,6 +624,7 @@
     renderAgency();
     renderPlanning();
     renderShop();
+    renderEvents();
   }
 
   function renderStats() {
@@ -1684,8 +1747,9 @@
 
   /* ================= Agence de voyage ================= */
 
-  function wishAdd(kind, name) {
+  function wishAdd(kind, name, seen) {
     var it = { id: uid(), name: name, addedBy: state.user.id, createdAt: new Date().toISOString() };
+    if (kind === "movies") { it.seen = !!seen; it.ratings = {}; }
     if (cloud) {
       cloud.addWish(kind, it);
     } else {
@@ -1706,13 +1770,10 @@
   }
 
   function renderAgency() {
-    renderWishList("cities", "#city-list", "Aucune ville pour l'instant. Ajoute la première envie !");
-    renderWishList("hikes", "#hike-list", "Aucune rando notée. Balance tes idées de sentiers !");
-    renderWishList("movies", "#movie-list", "Aucun film noté. Ajoute le premier pour la prochaine soirée !", FILM_ICON);
+    renderMovies();
     renderStops();
   }
 
-  var WISH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
   var FILM_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M2 16h5M17 8h5M17 16h5M2 12h20"/></svg>';
   var TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
@@ -1729,7 +1790,9 @@
     return {
       id: id || d.id, type: d.type === "hotel" ? "hotel" : "step", via: d.via === "plane" ? "plane" : "road",
       name: d.name || "", address: d.address || "", lat: +d.lat, lng: +d.lng,
-      from: d.from || "", to: d.to || "", trip: d.trip || DEFAULT_TRIP, createdBy: d.createdBy, createdAt: d.createdAt
+      from: d.from || "", to: d.to || "", fromTime: d.fromTime || "", toTime: d.toTime || "",
+      order: typeof d.order === "number" ? d.order : undefined,
+      trip: d.trip || DEFAULT_TRIP, createdBy: d.createdBy, createdAt: d.createdAt
     };
   }
 
@@ -1809,7 +1872,26 @@
   }
 
   function findStop(id) { return state.data.stops.filter(function (x) { return x.id === id; })[0]; }
-  function stopRange(s) { return !s.from ? "" : !s.to || s.to === s.from ? dm(s.from) : dm(s.from) + " → " + dm(s.to); }
+  function hm(t) { return t ? " " + t.replace(":", "h") : ""; }
+  function stopRange(s) {
+    if (!s.from) return "";
+    var start = dm(s.from) + hm(s.fromTime);
+    if (!s.to || (s.to === s.from && !s.toTime)) return start;
+    return start + " → " + (s.to === s.from ? hm(s.toTime).trim() : dm(s.to) + hm(s.toTime));
+  }
+
+  // nouvel ordre choisi à la main : on renumérote tout le trajet
+  function reorderStops(from, to) {
+    var stops = IT.sortStops(tripStops());
+    stops.splice(to, 0, stops.splice(from, 1)[0]);
+    stops.forEach(function (x, i) {
+      if (x.order === i) return;
+      x.order = i; // affichage immédiat, la synchro suit
+      if (cloud) cloud.saveStop(stopFields(x), true);
+    });
+    saveData();
+    renderStops();
+  }
 
   function initTripMap() {
     var el = $("#trip-map");
@@ -1962,7 +2044,7 @@
       }
       if (s.type !== "hotel") n++;
       return leg + '<li><div class="plan-item stop-item" data-stop="' + esc(s.id) + '" role="button" tabindex="0">' +
-        '<span class="map-pin type-' + s.type + '">' + (s.type === "hotel" ? "H" : n) + "</span>" +
+        '<span class="map-pin drag-handle type-' + s.type + '" title="Glisser pour changer l\'ordre">' + (s.type === "hotel" ? "H" : n) + "</span>" +
         '<span class="plan-item-main"><strong>' + esc(s.name) + "</strong>" +
         "<span>" + esc([stopRange(s), s.address].filter(Boolean).join(" · ") || "Pas d'adresse") + "</span></span>" +
         '<a class="btn-ghost btn-xs" href="' + esc(IT.gmapsPlace(s)) + '" target="_blank" rel="noopener">Maps</a></div></li>';
@@ -1981,6 +2063,8 @@
     $("#stop-address").value = d.address || "";
     $("#stop-from").value = d.from || "";
     $("#stop-to").value = d.to || "";
+    $("#stop-from-time").value = d.fromTime || "";
+    $("#stop-to-time").value = d.toTime || "";
     $("#stop-delete").hidden = !s;
     $("#stop-error").hidden = true;
     syncStopModal();
@@ -2029,9 +2113,11 @@
   function submitStop(e) {
     e.preventDefault();
     var name = $("#stop-name").value.trim(), from = $("#stop-from").value, to = $("#stop-to").value;
+    var fromTime = $("#stop-from-time").value, toTime = $("#stop-to-time").value;
     var err = !name ? "Donne un nom à l'étape."
       : to && !from ? "Indique aussi la date d'arrivée."
-      : to && to < from ? "La date de départ est avant l'arrivée." : null;
+      : (fromTime && !from) || (toTime && !to) ? "Une heure va avec sa date."
+      : to && (to < from || (to === from && fromTime && toTime && toTime < fromTime)) ? "Le départ est avant l'arrivée." : null;
     if (err) {
       $("#stop-error").textContent = err;
       $("#stop-error").hidden = false;
@@ -2040,7 +2126,8 @@
     var existing = stopEd.id ? findStop(stopEd.id) : null;
     saveStop(stopFields({
       type: stopEd.type, via: stopEd.via, name: name, address: $("#stop-address").value.trim(),
-      lat: stopEd.lat, lng: stopEd.lng, from: from, to: to,
+      lat: stopEd.lat, lng: stopEd.lng, from: from, to: to, fromTime: fromTime, toTime: toTime,
+      order: existing ? existing.order : undefined, // nouvelle étape : après celles rangées à la main
       trip: existing ? existing.trip : activeTrip().id,
       createdBy: existing ? existing.createdBy : state.user.id,
       createdAt: existing ? existing.createdAt : new Date().toISOString()
@@ -2138,22 +2225,154 @@
     }
     $("#stop-list").addEventListener("click", onItem);
     $("#stop-list").addEventListener("keydown", onItem);
+    dragSort($("#stop-list"), ".stop-item", reorderStops);
   }
 
-  function renderWishList(kind, sel, emptyMsg, icon) {
-    var list = $(sel);
+  /* ================= Films : à voir / vus (notés sur 10) ================= */
+
+  function findMovie(id) { return state.data.movies.filter(function (x) { return x.id === id; })[0]; }
+
+  function saveMovie(m) {
+    if (cloud) cloud.saveMovie(m);
+    else { saveData(); renderMovies(); }
+  }
+
+  function movieAvg(m) {
+    var notes = Object.keys(m.ratings || {}).map(function (k) { return m.ratings[k]; });
+    if (!notes.length) return null;
+    return notes.reduce(function (a, b) { return a + b; }, 0) / notes.length;
+  }
+
+  function movieDel(m) {
+    return '<button type="button" class="icon-btn wish-del" data-kind="movies" data-id="' + esc(m.id) + '" aria-label="Supprimer">' + TRASH_ICON + "</button>";
+  }
+
+  function renderMovies() {
+    var list = $("#movie-list"), seenList = $("#seen-list");
+    if (!list || !seenList) return;
+    if (seenList.contains(document.activeElement) && document.activeElement.tagName === "SELECT") return; // note en cours de choix
+    var todo = state.data.movies.filter(function (m) { return !m.seen; });
+    var seen = state.data.movies.filter(function (m) { return m.seen; });
+
+    list.innerHTML = todo.length ? todo.map(function (m) {
+      return '<li class="wish-item"><span class="wish-ico">' + FILM_ICON + "</span>" +
+        '<span class="wish-name">' + esc(m.name) + "</span>" +
+        '<span class="wish-by">' + esc(member(m.addedBy).name) + "</span>" +
+        '<button type="button" class="btn-ghost btn-xs wish-seen" data-id="' + esc(m.id) + '">Vu ✓</button>' + movieDel(m) + "</li>";
+    }).join("") : '<li class="empty-state">Aucun film noté. Ajoute le premier pour la prochaine soirée !</li>';
+
+    // les mieux notés en haut
+    function avgOr(m) { var v = movieAvg(m); return v === null ? -1 : v; }
+    seen.sort(function (a, b) { return avgOr(b) - avgOr(a); });
+    var opts = [""].concat([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    seenList.innerHTML = seen.length ? seen.map(function (m) {
+      var r = m.ratings || {}, avg = movieAvg(m), mine = r[state.user.id];
+      var others = CFG.accounts.filter(function (a) { return a.id !== state.user.id && typeof r[a.id] === "number"; });
+      return '<li class="wish-item seen-item"><span class="wish-ico">' + FILM_ICON + "</span>" +
+        '<span class="wish-name">' + esc(m.name) + "</span>" +
+        '<span class="seen-avg">' + (avg === null ? "—" : avg.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + "/10") + "</span>" +
+        movieDel(m) +
+        '<div class="seen-rates"><label class="seen-rate">Ta note <select class="seen-select" data-id="' + esc(m.id) + '">' +
+          opts.map(function (v) {
+            return '<option value="' + v + '"' + (v === "" ? (typeof mine !== "number" ? " selected" : "") : v === mine ? " selected" : "") + ">" + (v === "" ? "–" : v) + "</option>";
+          }).join("") + "</select></label>" +
+          others.map(function (a) { return '<span class="seen-rate">' + avatarDot(a, "mini-dot") + r[a.id] + "</span>"; }).join("") +
+        "</div></li>";
+    }).join("") : '<li class="empty-state">Aucun film vu pour l\'instant.</li>';
+  }
+
+  function bindMovies() {
+    $("#movie-list").addEventListener("click", function (e) {
+      var b = e.target.closest(".wish-seen"), m = b && findMovie(b.dataset.id);
+      if (!m) return;
+      m.seen = true;
+      saveMovie(m);
+      toast("« " + m.name + " » rangé dans les films vus : à vos notes !");
+    });
+    $("#seen-list").addEventListener("change", function (e) {
+      var sel = e.target.closest(".seen-select"), m = sel && findMovie(sel.dataset.id);
+      if (!m) return;
+      m.ratings = m.ratings || {};
+      if (sel.value === "") delete m.ratings[state.user.id];
+      else m.ratings[state.user.id] = +sel.value;
+      sel.blur();
+      saveMovie(m);
+    });
+  }
+
+  /* ================= Events : chacun son classement ================= */
+
+  var evWho = null; // classement affiché (par défaut le sien)
+
+  // ordre perso de `uid` : ses events rangés, puis les nouveaux (ordre d'ajout)
+  function eventRanking(uid) {
+    var pos = Object.create(null);
+    ((state.data.eventRanks[uid] || {}).order || []).forEach(function (id, i) { if (!(id in pos)) pos[id] = i; });
+    function p(ev) { return ev.id in pos ? pos[ev.id] : Infinity; }
+    return state.data.events.slice().sort(function (a, b) { return p(a) === p(b) ? 0 : p(a) < p(b) ? -1 : 1; }); // tri stable
+  }
+
+  function renderEvents() {
+    var list = $("#event-list");
     if (!list) return;
-    var items = state.data[kind];
-    if (!items.length) {
-      list.innerHTML = '<li class="empty-state">' + esc(emptyMsg) + "</li>";
-      return;
-    }
-    list.innerHTML = items.map(function (it) {
-      return '<li class="wish-item"><span class="wish-ico">' + (icon || WISH_ICON) + "</span>" +
-        '<span class="wish-name">' + esc(it.name) + "</span>" +
-        '<span class="wish-by">' + esc(member(it.addedBy).name) + "</span>" +
-        '<button type="button" class="icon-btn wish-del" data-kind="' + kind + '" data-id="' + it.id + '" aria-label="Supprimer">' + TRASH_ICON + "</button></li>";
+    if (!evWho) evWho = state.user.id;
+    var mine = evWho === state.user.id, who = member(evWho);
+    $("#event-who").innerHTML = CFG.accounts.map(function (a) {
+      return '<button type="button" class="filter-chip' + (a.id === evWho ? " active" : "") + '" data-who="' + esc(a.id) + '">' +
+        avatarDot(a, "mini-dot") + "<span>" + esc(a.id === state.user.id ? "Moi" : a.name) + "</span></button>";
     }).join("");
+    var evs = eventRanking(evWho);
+    $("#event-hint").textContent = !evs.length ? "" : mine
+      ? "Ton classement : fais glisser un numéro pour le changer."
+      : "Le classement de " + who.name + ".";
+    list.innerHTML = evs.length ? evs.map(function (ev, i) {
+      return '<li class="plan-item event-item">' +
+        '<span class="event-rank' + (mine ? " drag-handle" : "") + '"' + (mine ? ' title="Glisser pour changer l\'ordre"' : "") + ">" + (i + 1) + "</span>" +
+        '<span class="plan-item-main"><strong>' + esc(ev.text) + "</strong><span>ajouté par " + esc(member(ev.addedBy).name) + "</span></span>" +
+        (ev.addedBy === state.user.id ? '<button type="button" class="icon-btn event-del" data-id="' + esc(ev.id) + '" aria-label="Supprimer l\'event">' + TRASH_ICON + "</button>" : "") +
+        "</li>";
+    }).join("") : '<li class="empty-state">Aucun event pour l\'instant. Ajoute le premier au-dessus !</li>';
+  }
+
+  function saveRanking(order) {
+    var uid = state.user.id, cur = state.data.eventRanks[uid] || {};
+    state.data.eventRanks[uid] = { id: cur.id, order: order };
+    saveData();
+    renderEvents();
+    if (cloud) cloud.saveRank(uid, order, cur.id);
+  }
+
+  function bindEvents() {
+    $("#event-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = $("#event-input").value.trim().slice(0, 150);
+      if (!v) return;
+      var ev = { id: uid(), text: v, addedBy: state.user.id, createdAt: new Date().toISOString() };
+      if (cloud) cloud.addEvent(ev);
+      else { state.data.events.push(ev); saveData(); renderEvents(); }
+      $("#event-input").value = "";
+      toast("Event ajouté");
+    });
+    $("#event-who").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-who]");
+      if (b) { evWho = b.dataset.who; renderEvents(); }
+    });
+    $("#event-list").addEventListener("click", function (e) {
+      var b = e.target.closest(".event-del");
+      if (!b) return;
+      var id = b.dataset.id;
+      askConfirm({ title: "Supprimer cet event ?", message: "Il disparaîtra du classement de tout le monde.", confirmLabel: "Supprimer" })
+        .then(function (ok) {
+          if (!ok) return;
+          if (cloud) cloud.delMeta(id);
+          else { state.data.events = state.data.events.filter(function (x) { return x.id !== id; }); saveData(); renderEvents(); }
+        });
+    });
+    dragSort($("#event-list"), ".event-item", function (from, to) {
+      var ids = eventRanking(state.user.id).map(function (ev) { return ev.id; });
+      ids.splice(to, 0, ids.splice(from, 1)[0]);
+      saveRanking(ids);
+    });
   }
 
   /* ================= Liste de courses ================= */
@@ -2762,22 +2981,19 @@
     // Agence de voyage
     bindPlanning();
 
-    $("#city-form").addEventListener("submit", function (e) {
-      e.preventDefault();
-      var v = $("#city-input").value.trim();
-      if (v) { wishAdd("cities", v); $("#city-input").value = ""; }
-    });
-    $("#hike-form").addEventListener("submit", function (e) {
-      e.preventDefault();
-      var v = $("#hike-input").value.trim();
-      if (v) { wishAdd("hikes", v); $("#hike-input").value = ""; }
-    });
     $("#movie-form").addEventListener("submit", function (e) {
       e.preventDefault();
       var v = $("#movie-input").value.trim();
       if (v) { wishAdd("movies", v); $("#movie-input").value = ""; }
     });
+    $("#seen-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = $("#seen-input").value.trim();
+      if (v) { wishAdd("movies", v, true); $("#seen-input").value = ""; }
+    });
+    bindMovies();
     bindStops();
+    bindEvents();
 
     // Filtre des dépenses par catégorie
     $("#exp-filter").addEventListener("click", function (e) {
@@ -2822,7 +3038,7 @@
     $all(".tab").forEach(function (t) { t.classList.toggle("active", t.dataset.tab === name); });
     $all(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     tabTrail = tabTrail.concat(name).slice(-3);
-    if (name === "agenda") renderAgenda();
+    if (name === "planning") renderAgenda();
     if (name === "voyage") {
       initTripMap();
       if (tripMap) tripMap.invalidateSize();

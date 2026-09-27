@@ -42,6 +42,18 @@
     return a;
   }
 
+  // Mots trop proches (Citron|Citron vert, Chat|Chaton, Pomme de terre|Terre) : l'Undercover se grille tout seul.
+  // Proches = l'un contient l'autre, ou ils partagent un mot de 4 lettres ou plus (accents ignorés).
+  function tooClose(pair) {
+    var w = pair.split("|").map(function (s) {
+      return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    });
+    if (w[0].indexOf(w[1]) >= 0 || w[1].indexOf(w[0]) >= 0) return true;
+    var big = function (s) { return s.split(/[^a-z]+/).filter(function (t) { return t.length >= 4; }); };
+    var a = big(w[0]);
+    return big(w[1]).some(function (t) { return a.indexOf(t) >= 0; });
+  }
+
   // Paire au hasard parmi celles pas encore jouées (null si tout est joué)
   function pickPair(pairs, used, rng) {
     var done = {};
@@ -118,7 +130,7 @@
   }
 
   var MW = {
-    defaultMix: defaultMix, mixError: mixError, pickPair: pickPair, deal: deal,
+    defaultMix: defaultMix, mixError: mixError, tooClose: tooClose, pickPair: pickPair, deal: deal,
     speakOrder: speakOrder, winner: winner, eliminate: eliminate, whiteGuess: whiteGuess
   };
   if (typeof module !== "undefined" && module.exports) { module.exports = MW; return; }
@@ -126,7 +138,7 @@
   /* ================= Interface ================= */
 
   var CFG = window.CARIBOU_CONFIG || { accounts: [] };
-  var PAIRS = window.MRWHITE_PAIRS || [];
+  var PAIRS = (window.MRWHITE_PAIRS || []).filter(function (p) { return !tooClose(p); });
   var LS_SOLO = "mrwhite_solo";       // partie 1 téléphone en cours
   var LS_GAME = "mrwhite_game_id";    // partie multi rejointe
   var LS_PID = "mrwhite_pid";
@@ -389,6 +401,7 @@
       card("Paires de mots", null,
         '<p class="mw-used"><strong id="mw-used-count">' + used.length + "</strong> / " + PAIRS.length +
           " paires déjà jouées. Elles sont cochées automatiquement et ne ressortent plus.</p>" +
+        '<details class="mw-rules"><summary>Voir les paires déjà sorties</summary><ul class="mw-used-list" id="mw-used-list">' + usedHtml() + "</ul></details>" +
         '<button class="btn-ghost btn-xs" data-act="reset-used">Réinitialiser la liste</button>') +
       card("Règles express", null,
         '<details class="mw-rules"><summary>Afficher</summary>' +
@@ -396,6 +409,12 @@
         "<p><strong>Undercovers</strong> : ont un mot proche, sans le savoir. Ils gagnent s'ils sont au moins aussi nombreux que les Civils une fois Mr. White éliminé.</p>" +
         "<p><strong>Mr. White</strong> : n'a pas de mot. Éliminé, il peut deviner le mot des Civils pour gagner. Il gagne aussi s'il tient jusqu'aux 2 derniers.</p>" +
         "<p>Chaque tour : un indice chacun (pas de répétition), débat, vote à l'oral, puis on indique ici qui est éliminé.</p></details>");
+  }
+
+  // paires déjà sorties, la plus récente en haut
+  function usedHtml() {
+    if (!used.length) return "<li>Aucune pour l'instant.</li>";
+    return used.slice().reverse().map(function (p) { return "<li>" + esc(p.split("|").join(" / ")) + "</li>"; }).join("");
   }
 
   // QR du lien de la partie (librairie qrcode-generator ; si elle n'a pas chargé, pas de QR)
@@ -627,7 +646,11 @@
     initPb();
     try { g = JSON.parse(lsGet(LS_SOLO)); } catch (e) { g = null; }
     render();
-    loadUsed().then(function () { var c = document.getElementById("mw-used-count"); if (c) c.textContent = used.length; })
+    loadUsed().then(function () {
+      var c = document.getElementById("mw-used-count"), l = document.getElementById("mw-used-list");
+      if (c) c.textContent = used.length;
+      if (l) l.innerHTML = usedHtml();
+    })
       .catch(function () {});
     var savedId = lsGet(LS_GAME);
     if (!g && pb && savedId) {

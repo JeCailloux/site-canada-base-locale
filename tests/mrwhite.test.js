@@ -16,6 +16,15 @@ for (const p of pairs) {
   seen.add(k);
 }
 
+// --- mots trop proches écartés, il en reste assez
+assert(MW.tooClose("Citron|Citron vert"));
+assert(MW.tooClose("Chat|Chaton"));
+assert(MW.tooClose("Pomme de terre|Terre cuite"));
+assert(!MW.tooClose("Pomme|Poire"));
+assert(!MW.tooClose("Chat|Chien"));
+const playable = pairs.filter((p) => !MW.tooClose(p));
+assert(playable.length >= 1500, "trop peu de paires jouables : " + playable.length);
+
 // --- tirage : ne ressort jamais une paire jouée, null quand tout est joué
 assert.strictEqual(MW.pickPair(["a|b", "c|d"], ["a|b"], Math.random), "c|d");
 assert.strictEqual(MW.pickPair(["a|b"], ["a|b"], Math.random), null);
@@ -64,4 +73,4 @@ MW.eliminate(g2, "w");
 MW.whiteGuess(g2, true);
 assert.deepStrictEqual([g2.status, g2.winner], ["over", "white"]);
 
-console.log("OK : " + pairs.length + " paires, logique Mr. White valide");
+console.log("OK : " + pairs.length + " paires (" + playable.length + " jouables), logique Mr. White valide");
