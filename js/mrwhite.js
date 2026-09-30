@@ -193,7 +193,12 @@
   }
 
   function usedRecords() {
-    return pb.collection("meta").getFullList({ filter: 'kind="mrwhite-used"' });
+    return pb.collection("meta").getFullList({ filter: 'kind="mrwhite-used" && deletedAt=""' });
+  }
+
+  // rien n'est effacé de la base : on désactive l'enregistrement
+  function softDel(id) {
+    return pb.collection("meta").update(id, { deletedAt: new Date().toISOString(), deletedBy: me.name || "?" });
   }
 
   function loadUsed() {
@@ -214,7 +219,7 @@
     used = list;
     if (!pb) { lsSet(LS_USED, JSON.stringify(list)); return Promise.resolve(); }
     return usedRecords().then(function (recs) {
-      var ops = recs.slice(1).map(function (r) { return pb.collection("meta").delete(r.id); });
+      var ops = recs.slice(1).map(function (r) { return softDel(r.id); });
       ops.push(recs.length
         ? pb.collection("meta").update(recs[0].id, { data: { pairs: list } })
         : pb.collection("meta").create({ kind: "mrwhite-used", data: { pairs: list } }));
@@ -246,7 +251,7 @@
     gameId = id;
     lsSet(LS_GAME, id);
     pb.collection("meta").subscribe(id, function (e) {
-      if (e.action === "delete") { leaveLocal(); toast("La partie a été fermée par l'hôte"); return; }
+      if (e.action === "delete" || e.record.deletedAt) { leaveLocal(); toast("La partie a été fermée par l'hôte"); return; }
       var prev = g && g.status;
       g = e.record.data;
       if (prev !== g.status) { ui.shown = false; ui.confirmPid = null; ui.showWord = false; }
@@ -281,10 +286,10 @@
       code: genCode(), mode: "multi", host: me.pid, status: "lobby", custom: false,
       mix: defaultMix(4), players: [{ pid: me.pid, name: me.name }], updated: new Date().toISOString()
     };
-    pb.collection("meta").getFullList({ filter: 'kind="mrwhite-game"' }).then(function (recs) {
-      // ménage : parties de plus de 2 jours
+    pb.collection("meta").getFullList({ filter: 'kind="mrwhite-game" && deletedAt=""' }).then(function (recs) {
+      // ménage : parties de plus de 2 jours (désactivées)
       recs.forEach(function (r) {
-        if (new Date((r.data && r.data.updated) || 0).getTime() < old) pb.collection("meta").delete(r.id).catch(function () {});
+        if (new Date((r.data && r.data.updated) || 0).getTime() < old) softDel(r.id).catch(function () {});
       });
       return pb.collection("meta").create({ kind: "mrwhite-game", data: game });
     }).then(function (rec) {
@@ -298,7 +303,7 @@
     if (!askName()) return;
     code = (code || "").trim().toUpperCase();
     if (code.length !== 4) { toast("Le code fait 4 lettres", true); return; }
-    pb.collection("meta").getFullList({ filter: 'kind="mrwhite-game"' }).then(function (recs) {
+    pb.collection("meta").getFullList({ filter: 'kind="mrwhite-game" && deletedAt=""' }).then(function (recs) {
       var rec = recs.filter(function (r) { return r.data && r.data.code === code; })[0];
       if (!rec) { toast("Aucune partie avec le code " + code, true); return; }
       g = rec.data;
@@ -355,7 +360,7 @@
     if (isHost()) {
       var id = gameId;
       leaveLocal();
-      pb.collection("meta").delete(id).catch(function () {});
+      softDel(id).catch(function () {});
       return;
     }
     var id2 = gameId;
@@ -655,6 +660,7 @@
     var savedId = lsGet(LS_GAME);
     if (!g && pb && savedId) {
       pb.collection("meta").getOne(savedId).then(function (rec) {
+        if (rec.deletedAt) throw new Error("partie fermée");
         if (urlCode && rec.data.code !== urlCode) { lsSet(LS_GAME, null); autoJoin(urlCode); return; } // nouveau QR scanné
         g = rec.data;
         watchGame(rec.id);

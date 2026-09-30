@@ -280,10 +280,50 @@
 
     cloud = { pb: pb, settingId: null };
 
+    /* --- journal + suppression douce ---
+       Rien n'est jamais effacé : "supprimer" = poser deletedAt/deletedBy (inactif).
+       Chaque écriture ajoute une ligne dans `logs` (qui, quoi, avant, après). */
+    function who() { return state.user ? state.user.id : "?"; }
+    function recLabel(r) {
+      if (!r) return "";
+      if (r.collectionName === "expenses") return (r.type === "transfer" ? "Remboursement " : "") + (r.title || "") + " · " + r.amount + " " + (r.currency || "");
+      var d = r.data || {};
+      return r.kind + (d.text || d.name || d.title ? " · " + (d.text || d.name || d.title) : "");
+    }
+    function addLog(action, coll, before, after) {
+      var r = after || before;
+      pb.collection("logs").create({
+        at: new Date().toISOString(), user: who(), action: action, coll: coll,
+        recordId: r.id, label: recLabel(r), before: before, after: after
+      }).catch(function () {});
+    }
+    function create(coll, fields) {
+      return pb.collection(coll).create(fields).then(function (rec) { addLog("create", coll, null, rec); return rec; });
+    }
+    function update(coll, id, fields) {
+      return pb.collection(coll).getOne(id).then(function (before) {
+        return pb.collection(coll).update(id, fields).then(function (rec) {
+          var action = fields.deletedAt ? "delete" : fields.deletedAt === "" ? "restore" : "update";
+          addLog(action, coll, before, rec);
+          return rec;
+        });
+      });
+    }
+    function softDel(coll, id) { return update(coll, id, { deletedAt: new Date().toISOString(), deletedBy: who() }); }
+    cloud.restore = function (coll, id) {
+      return update(coll, id, { deletedAt: "", deletedBy: "" })
+        .then(coll === "expenses" ? cloud.refetchExpenses : cloud.refetchMeta)
+        .catch(function () { toast("Restauration échouée", true); });
+    };
+    cloud.logs = function () {
+      return pb.collection("logs").getList(1, 200, { sort: "-at" }).then(function (res) { return res.items; });
+    };
+    function alive(r) { return !r.deletedAt; }
+
     // --- lectures ---
     cloud.refetchExpenses = function () {
       return pb.collection("expenses").getFullList({ sort: "created" }).then(function (recs) {
-        state.data.expenses = recs.map(function (r) {
+        state.data.expenses = recs.filter(alive).map(function (r) {
           return {
             id: r.id, title: r.title, amount: r.amount, currency: r.currency,
             payerId: r.payerId, participants: r.participants || [], category: r.category,
@@ -299,7 +339,7 @@
     cloud.refetchMeta = function () {
       return pb.collection("meta").getFullList({ sort: "created" }).then(function (recs) {
         var chals = [], cities = [], hikes = [], movies = [], stops = [], trips = [], wheel = {}, plans = [], shops = [], events = [], ranks = {};
-        recs.forEach(function (r) {
+        recs.filter(alive).forEach(function (r) {
           var d = r.data || {};
           if (r.kind === "challenge") chals.push({ id: r.id, text: d.text, createdBy: d.createdBy, createdAt: d.createdAt });
           else if (r.kind === "plan") plans.push(planFields(d, r.id));
@@ -353,86 +393,86 @@
     }
     cloud.saveExpense = function (payload, editing) {
       var op = editing
-        ? pb.collection("expenses").update(payload.id, expenseFields(payload))
-        : pb.collection("expenses").create(expenseFields(payload));
+        ? update("expenses", payload.id, expenseFields(payload))
+        : create("expenses", expenseFields(payload));
       return op.then(cloud.refetchExpenses).catch(function () { toast("Enregistrement échoué", true); });
     };
     cloud.deleteExpense = function (id) {
-      return pb.collection("expenses").delete(id).then(cloud.refetchExpenses).catch(function () { toast("Suppression échouée", true); });
+      return softDel("expenses", id).then(cloud.refetchExpenses).catch(function () { toast("Suppression échouée", true); });
     };
     cloud.clearExpenses = function () {
-      return pb.collection("expenses").getFullList().then(function (recs) {
-        return Promise.all(recs.map(function (r) { return pb.collection("expenses").delete(r.id); }));
+      return pb.collection("expenses").getFullList({ filter: 'deletedAt = ""' }).then(function (recs) {
+        return Promise.all(recs.map(function (r) { return softDel("expenses", r.id); }));
       }).then(cloud.refetchExpenses).catch(function () { toast("Effacement échoué", true); });
     };
 
     cloud.addChallenge = function (c) {
-      return pb.collection("meta").create({ kind: "challenge", data: { text: c.text, createdBy: c.createdBy, createdAt: c.createdAt } })
+      return create("meta", { kind: "challenge", data: { text: c.text, createdBy: c.createdBy, createdAt: c.createdAt } })
         .then(cloud.refetchMeta).catch(function () { toast("Ajout échoué", true); });
     };
     cloud.delMeta = function (id) {
-      return pb.collection("meta").delete(id).then(cloud.refetchMeta).catch(function () { toast("Suppression échouée", true); });
+      return softDel("meta", id).then(cloud.refetchMeta).catch(function () { toast("Suppression échouée", true); });
     };
     cloud.setWheel = function (res) {
-      return pb.collection("meta").create({ kind: "wheel", data: res })
+      return create("meta", { kind: "wheel", data: res })
         .then(cloud.refetchMeta).catch(function () { toast("Tirage non enregistré", true); });
     };
     cloud.addWish = function (kind, it) {
       var single = { cities: "city", hikes: "hike", movies: "movie" }[kind];
       var data = { name: it.name, addedBy: it.addedBy, createdAt: it.createdAt };
       if (kind === "movies") { data.seen = it.seen; data.ratings = it.ratings; }
-      return pb.collection("meta").create({ kind: single, data: data })
+      return create("meta", { kind: single, data: data })
         .then(cloud.refetchMeta).catch(function () { toast("Ajout échoué", true); });
     };
     // ponytail: notes de tous dans un seul enregistrement, deux notes à la même seconde => la dernière gagne
     cloud.saveMovie = function (m) {
-      return pb.collection("meta").update(m.id, { data: { name: m.name, addedBy: m.addedBy, createdAt: m.createdAt, seen: !!m.seen, ratings: m.ratings || {} } })
+      return update("meta", m.id, { data: { name: m.name, addedBy: m.addedBy, createdAt: m.createdAt, seen: !!m.seen, ratings: m.ratings || {} } })
         .then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
     };
     cloud.addEvent = function (ev) {
-      return pb.collection("meta").create({ kind: "event", data: { text: ev.text, addedBy: ev.addedBy, createdAt: ev.createdAt } })
+      return create("meta", { kind: "event", data: { text: ev.text, addedBy: ev.addedBy, createdAt: ev.createdAt } })
         .then(cloud.refetchMeta).catch(function () { toast("Ajout échoué", true); });
     };
     // un enregistrement de classement par personne
     cloud.saveRank = function (user, order, id) {
       var data = { user: user, order: order };
       var op = id
-        ? pb.collection("meta").update(id, { data: data })
-        : pb.collection("meta").create({ kind: "eventrank", data: data });
+        ? update("meta", id, { data: data })
+        : create("meta", { kind: "eventrank", data: data });
       return op.then(cloud.refetchMeta).catch(function () { toast("Classement non enregistré", true); });
     };
     cloud.setRate = function () {
       var data = { eurToCad: state.data.eurToCad, usdToCad: state.data.usdToCad };
       var op = cloud.settingId
-        ? pb.collection("meta").update(cloud.settingId, { data: data })
-        : pb.collection("meta").create({ kind: "setting", data: data });
+        ? update("meta", cloud.settingId, { data: data })
+        : create("meta", { kind: "setting", data: data });
       return op.then(cloud.refetchMeta).catch(function () {});
     };
     cloud.savePlan = function (p, editing) {
       var data = planFields(p);
       delete data.id;
       var op = editing
-        ? pb.collection("meta").update(p.id, { data: data })
-        : pb.collection("meta").create({ kind: "plan", data: data });
+        ? update("meta", p.id, { data: data })
+        : create("meta", { kind: "plan", data: data });
       return op.then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
     };
     cloud.saveStop = function (s, editing) {
       var data = stopFields(s);
       delete data.id;
       var op = editing
-        ? pb.collection("meta").update(s.id, { data: data })
-        : pb.collection("meta").create({ kind: "stop", data: data });
+        ? update("meta", s.id, { data: data })
+        : create("meta", { kind: "stop", data: data });
       return op.then(cloud.refetchMeta).catch(function () { toast("Enregistrement échoué", true); });
     };
     // renvoie l'id du trajet créé (pour l'afficher tout de suite)
     cloud.addTrip = function (t) {
-      return pb.collection("meta").create({ kind: "trip", data: { name: t.name, createdBy: t.createdBy, createdAt: t.createdAt } })
+      return create("meta", { kind: "trip", data: { name: t.name, createdBy: t.createdBy, createdAt: t.createdAt } })
         .then(function (rec) { return cloud.refetchMeta().then(function () { return rec.id; }); })
         .catch(function () { toast("Création échouée", true); return null; });
     };
-    // supprime plusieurs enregistrements meta d'un coup (trajet + ses étapes)
+    // désactive plusieurs enregistrements meta d'un coup (trajet + ses étapes)
     cloud.delMetas = function (ids) {
-      return Promise.all(ids.map(function (id) { return pb.collection("meta").delete(id); }))
+      return Promise.all(ids.map(function (id) { return softDel("meta", id); }))
         .then(cloud.refetchMeta).catch(function () { toast("Suppression échouée", true); cloud.refetchMeta(); });
     };
 
@@ -440,8 +480,8 @@
     cloud.saveShop = function (l, isNew) {
       var data = { name: l.name, items: l.items, createdAt: l.createdAt, finishedAt: l.finishedAt || null };
       var op = isNew
-        ? pb.collection("meta").create({ kind: "shoplist", data: data })
-        : pb.collection("meta").update(l.id, { data: data });
+        ? create("meta", { kind: "shoplist", data: data })
+        : update("meta", l.id, { data: data });
       return op.then(function (rec) { if (isNew) shopId = rec.id; return cloud.refetchMeta(); })
         .catch(function () { toast("Enregistrement échoué", true); });
     };
@@ -918,8 +958,10 @@
 
   // filtre de l'onglet Dépenses : "all", "transfer" ou un id de catégorie
   var expFilter = "all";
+  var payerFilter = "all"; // "all" ou id du compte qui a payé
 
   function matchesFilter(e) {
+    if (payerFilter !== "all" && e.payerId !== payerFilter) return false;
     if (expFilter === "all") return true;
     if (expFilter === "transfer") return isTransfer(e);
     return !isTransfer(e) && category(e.category).id === expFilter;
@@ -932,6 +974,10 @@
       return '<button type="button" class="filter-chip' + (o.id === expFilter ? " active" : "") + '" data-filter="' + o.id + '">' +
         o.icon + "<span>" + esc(o.name) + "</span></button>";
     }).join("");
+    $("#exp-payer-filter").innerHTML = [{ id: "all", name: "Tout le monde" }].concat(CFG.accounts).map(function (a) {
+      return '<button type="button" class="filter-chip' + (a.id === payerFilter ? " active" : "") + '" data-payer="' + a.id + '">' +
+        (a.color ? avatarDot(a, "mini-dot") : "") + "<span>" + esc(a.id === "all" ? a.name : "Payé par " + a.name) + "</span></button>";
+    }).join("");
   }
 
   function renderExpenseGroups() {
@@ -941,12 +987,12 @@
       return (b.date + (b.createdAt || "")).localeCompare(a.date + (a.createdAt || ""));
     });
     var sum = $("#exp-filter-sum");
-    sum.hidden = expFilter === "all" || !sorted.length;
+    sum.hidden = (expFilter === "all" && payerFilter === "all") || !sorted.length;
     sum.textContent = sorted.length + " ligne" + (sorted.length > 1 ? "s" : "") + " · " + M(sorted.reduce(function (s, e) { return s + toCad(e); }, 0));
     if (!sorted.length) {
-      box.innerHTML = expFilter === "all"
+      box.innerHTML = expFilter === "all" && payerFilter === "all"
         ? '<div class="card"><p class="empty-state"><strong>Aucune dépense</strong>Clique sur « Ajouter » pour lancer les comptes.</p></div>'
-        : '<div class="card"><p class="empty-state">Rien dans cette catégorie.</p></div>';
+        : '<div class="card"><p class="empty-state">Rien pour ce filtre.</p></div>';
       return;
     }
     var groups = {};
@@ -1273,7 +1319,7 @@
     askConfirm({
       title: "Supprimer la dépense ?",
       message: cloud
-        ? "Elle disparaîtra pour tout le monde. C'est définitif."
+        ? "Elle disparaîtra pour tout le monde (restaurable depuis Réglages › Journal)."
         : "Elle sera supprimée de cet appareil. C'est définitif.",
       confirmLabel: "Supprimer"
     }).then(function (yes) {
@@ -1288,6 +1334,48 @@
       closeModal();
       toast("Dépense supprimée");
     });
+  }
+
+  /* ================= Journal (Réglages) ================= */
+
+  var LOG_VERB = { create: "a ajouté", update: "a modifié", "delete": "a supprimé", restore: "a restauré" };
+  var LOG_SKIP = { id: 1, created: 1, updated: 1, collectionId: 1, collectionName: 1, expand: 1, deletedAt: 1, deletedBy: 1 };
+
+  // champs modifiés entre avant/après ("data" de meta aplati)
+  function logDiff(b, a) {
+    function flat(r) {
+      var o = {};
+      Object.keys(r || {}).forEach(function (k) {
+        if (LOG_SKIP[k]) return;
+        if (k === "data" && r.data && typeof r.data === "object") Object.keys(r.data).forEach(function (dk) { o[dk] = r.data[dk]; });
+        else o[k] = r[k];
+      });
+      return o;
+    }
+    var fb = flat(b), fa = flat(a), out = [];
+    Object.keys(fa).forEach(function (k) {
+      var x = JSON.stringify(fb[k]), y = JSON.stringify(fa[k]);
+      if (x !== y) out.push(k + " : " + (x === undefined ? "∅" : x) + " → " + y);
+    });
+    return out.join(" · ");
+  }
+
+  function renderLogs() {
+    var list = $("#log-list");
+    if (!cloud) { list.innerHTML = '<li class="empty-state">Journal disponible seulement avec la synchro.</li>'; return; }
+    cloud.logs().then(function (logs) {
+      if (!logs.length) { list.innerHTML = '<li class="empty-state">Aucune action enregistrée pour l\'instant.</li>'; return; }
+      list.innerHTML = logs.map(function (l) {
+        var m = member(l.user), d = new Date(l.at);
+        var when = isNaN(d) ? "" : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+        var diff = l.action === "update" ? logDiff(l.before, l.after) : "";
+        return '<li class="challenge-item"><span class="wh-date">' + esc(when) + "</span>" + avatarDot(m, "mini-dot") +
+          '<span class="challenge-text' + (l.action === "delete" ? " log-del" : "") + '">' + esc(m.name) + " " + esc(LOG_VERB[l.action] || l.action) + " " + esc(l.label || l.recordId) +
+          (diff ? '<span class="log-diff">' + esc(diff) + "</span>" : "") + "</span>" +
+          (l.action === "delete" ? '<button type="button" class="btn-ghost btn-xs log-restore" data-coll="' + esc(l.coll) + '" data-id="' + esc(l.recordId) + '">Restaurer</button>' : "") +
+          "</li>";
+      }).join("");
+    }).catch(function () { list.innerHTML = '<li class="empty-state">Journal injoignable.</li>'; });
   }
 
   /* ================= Roue des défis ================= */
@@ -2963,6 +3051,12 @@
     bindRate("#rate-input", "eurToCad", "1 €");
     bindRate("#rate-usd-input", "usdToCad", "1 $ US");
     $("#export-xlsx-btn").addEventListener("click", exportExcel);
+    $("#log-list").addEventListener("click", function (e) {
+      var b = e.target.closest(".log-restore");
+      if (!b || !cloud) return;
+      b.disabled = true;
+      cloud.restore(b.dataset.coll, b.dataset.id).then(function () { toast("Restauré"); renderLogs(); });
+    });
 
     // Roue des défis
     $("#spin-btn").addEventListener("click", spinWheel);
@@ -3002,6 +3096,12 @@
       expFilter = b.dataset.filter;
       renderExpenseGroups();
     });
+    $("#exp-payer-filter").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-payer]");
+      if (!b) return;
+      payerFilter = b.dataset.payer;
+      renderExpenseGroups();
+    });
     document.addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest(".wish-del") : null;
       if (btn) wishDelete(btn.dataset.kind, btn.dataset.id);
@@ -3017,7 +3117,7 @@
       askConfirm({
         title: "Tout effacer ?",
         message: cloud
-          ? "Toutes les dépenses du voyage seront supprimées, pour tout le monde. Irréversible."
+          ? "Toutes les dépenses du voyage seront retirées, pour tout le monde (restaurables depuis le journal)."
           : "Toutes les dépenses de cet appareil seront supprimées. Irréversible.",
         confirmLabel: "Tout effacer"
       }).then(function (yes) {
@@ -3039,6 +3139,7 @@
     $all(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     tabTrail = tabTrail.concat(name).slice(-3);
     if (name === "planning") renderAgenda();
+    if (name === "reglages") renderLogs();
     if (name === "voyage") {
       initTripMap();
       if (tripMap) tripMap.invalidateSize();
@@ -3049,6 +3150,29 @@
       if (!tipsSpinning) setTipsRigged(tabTrail.join() === "conduite,defis,tips");
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* ---------- Mise à jour auto (signet iPhone : la page reste ouverte en mémoire) ----------
+     Au retour sur l'app, on compare l'ETag des fichiers du site : s'il a changé (nouveau
+     déploiement), on recharge. Pas pendant une saisie (modale ouverte). */
+  var CODE_FILES = ["./", "js/app.js", "js/config.js", "css/style.css"];
+  function codeStamp() {
+    return Promise.all(CODE_FILES.map(function (f) {
+      return fetch(f, { method: "HEAD", cache: "no-store" }).then(function (r) {
+        return r.headers.get("etag") || r.headers.get("last-modified") || "";
+      });
+    })).then(function (tags) { return tags.join("|"); });
+  }
+  function watchUpdates() {
+    var stamp = null;
+    codeStamp().then(function (s) { stamp = s; }).catch(function () {});
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState !== "visible" || !stamp) return;
+      codeStamp().then(function (s) {
+        if (s === stamp || document.querySelector("[id$='-modal']:not([hidden])")) return;
+        location.reload();
+      }).catch(function () {});
+    });
   }
 
   /* ================= Démarrage ================= */
@@ -3063,6 +3187,7 @@
     buildLogin();
     buildModalChoices();
     bindApp();
+    watchUpdates();
 
     var existing = currentSessionUser();
     if (existing) {

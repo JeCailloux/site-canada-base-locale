@@ -1253,6 +1253,8 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
 .challenge-text { flex: 1; font-weight: 600; font-size: 0.94rem; }
 .wheel-history .challenge-item { gap: 10px; }
 .wh-date { color: var(--text-dim); font-size: 0.8rem; font-weight: 700; min-width: 74px; }
+.log-diff { display: block; color: var(--text-dim); font-size: 0.8rem; font-weight: 500; overflow-wrap: anywhere; }
+.log-del { color: #FB7185; }
 
 @media (prefers-reduced-motion: reduce) {
   .wheel-needle { transition: none; }

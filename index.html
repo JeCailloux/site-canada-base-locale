@@ -201,6 +201,7 @@
           </button>
         </div>
         <div class="exp-filter" id="exp-filter" role="group" aria-label="Filtrer par catégorie"></div>
+        <div class="exp-filter" id="exp-payer-filter" role="group" aria-label="Filtrer par personne qui a payé"></div>
         <p class="card-sub exp-filter-sum" id="exp-filter-sum" hidden></p>
         <div id="expense-groups"></div>
       </section>
@@ -551,9 +552,15 @@
           </button>
         </article>
 
+        <article class="card">
+          <h2 class="card-title">Journal</h2>
+          <p class="card-sub">Qui a ajouté, modifié ou supprimé quoi (200 dernières actions). Rien n'est effacé de la base : une suppression peut être annulée avec « Restaurer ».</p>
+          <ul id="log-list" class="wheel-history"></ul>
+        </article>
+
         <article class="card card-danger">
           <h2 class="card-title">Zone dangereuse</h2>
-          <p class="card-sub">Supprime toutes les dépenses du voyage. Irréversible.</p>
+          <p class="card-sub">Retire toutes les dépenses du voyage (elles restent restaurables depuis le journal).</p>
           <button class="btn-danger" id="reset-btn">Tout effacer</button>
         </article>
 
