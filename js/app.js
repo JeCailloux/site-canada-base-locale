@@ -119,6 +119,13 @@
     return { id: id, name: "?", color: "#64748B" };
   }
 
+  // disabled = plus de connexion ; paidBy = sans compte, sa part est payée par un autre
+  function canLogin(a) { return !a.disabled && !a.paidBy; }
+  // comptes hors invités sans compte (roue, planning, events…)
+  function crew() { return CFG.accounts.filter(function (a) { return !a.paidBy; }); }
+  // qui supporte réellement la part de p
+  function bearer(p) { return member(p).paidBy || p; }
+
   function category(id) {
     for (var i = 0; i < CATEGORIES.length; i++) {
       if (CATEGORIES[i].id === id) return CATEGORIES[i];
@@ -515,7 +522,7 @@
     var id = localStorage.getItem(LS_SESSION) || getCookie();
     if (!id) return null;
     var m = member(id);
-    return m.name !== "?" ? m : null;
+    return m.name !== "?" && canLogin(m) ? m : null;
   }
 
   function login(account) {
@@ -539,7 +546,7 @@
 
     var grid = $("#avatar-grid");
     grid.innerHTML = "";
-    CFG.accounts.forEach(function (acc) {
+    CFG.accounts.filter(canLogin).forEach(function (acc) {
       var b = document.createElement("button");
       b.type = "button";
       b.className = "avatar-btn";
@@ -619,10 +626,10 @@
       var parts = exp.participants.filter(function (p) { return map[p]; });
       if (!parts.length) return;
       var each = cad / parts.length;
-      parts.forEach(function (p) { map[p].share += each; });
+      parts.forEach(function (p) { map[bearer(p)].share += each; });
     });
 
-    return CFG.accounts.map(function (a) {
+    return crew().map(function (a) {
       var e = map[a.id];
       return { id: a.id, paid: e.paid, share: e.share, balance: e.paid - e.share };
     });
@@ -767,7 +774,7 @@
   function renderStatsTab() {
     var expenses = spentOnly(); // les remboursements ne sont pas de l'argent perdu
     var total = expenses.reduce(function (s, e) { return s + toCad(e); }, 0);
-    var perHead = total / CFG.accounts.length;
+    var perHead = total / CFG.accounts.filter(function (a) { return !a.disabled; }).length;
 
     // --- Héro ---
     $("#stats-hero-total").textContent = M(total);
@@ -874,9 +881,9 @@
 
     // --- Podium des flambeurs ---
     var paid = {};
-    CFG.accounts.forEach(function (a) { paid[a.id] = 0; });
+    crew().forEach(function (a) { paid[a.id] = 0; });
     expenses.forEach(function (e) { if (paid[e.payerId] !== undefined) paid[e.payerId] += toCad(e); });
-    var ranking = CFG.accounts
+    var ranking = crew()
       .map(function (a) { return { m: a, paid: paid[a.id] }; })
       .sort(function (a, b) { return b.paid - a.paid; });
     var maxPaid = Math.max(ranking[0].paid, 1);
@@ -974,7 +981,7 @@
       return '<button type="button" class="filter-chip' + (o.id === expFilter ? " active" : "") + '" data-filter="' + o.id + '">' +
         o.icon + "<span>" + esc(o.name) + "</span></button>";
     }).join("");
-    $("#exp-payer-filter").innerHTML = [{ id: "all", name: "Tout le monde" }].concat(CFG.accounts).map(function (a) {
+    $("#exp-payer-filter").innerHTML = [{ id: "all", name: "Tout le monde" }].concat(crew()).map(function (a) {
       return '<button type="button" class="filter-chip' + (a.id === payerFilter ? " active" : "") + '" data-payer="' + a.id + '">' +
         (a.color ? avatarDot(a, "mini-dot") : "") + "<span>" + esc(a.id === "all" ? a.name : "Payé par " + a.name) + "</span></button>";
     }).join("");
@@ -1055,29 +1062,30 @@
       pb.dataset.id = acc.id;
       pb.style.setProperty("--av-color", acc.color);
       pb.innerHTML = '<span class="mini-dot" style="background:' + acc.color + '">' + esc(initials(acc.name)) + "</span>" + esc(acc.name);
+      if (acc.disabled) pb.dataset.disabled = "1"; // visible seulement pour les remboursements
+      var cb = pb.cloneNode(true);
+      var bb = pb.cloneNode(true);
       pb.addEventListener("click", function () {
         state.modalPayer = acc.id;
         state.modalDebts = {};
         syncModalChoices();
       });
-      payerBox.appendChild(pb);
+      if (!acc.paidBy) payerBox.appendChild(pb);
 
-      var cb = pb.cloneNode(true);
       cb.addEventListener("click", function () {
         var idx = state.modalParts.indexOf(acc.id);
         if (idx >= 0) state.modalParts.splice(idx, 1);
         else state.modalParts.push(acc.id);
         syncModalChoices();
       });
-      partBox.appendChild(cb);
+      if (!acc.disabled) partBox.appendChild(cb);
 
-      var bb = pb.cloneNode(true);
       bb.addEventListener("click", function () {
         state.modalBenef = acc.id;
         state.modalDebts = {};
         syncModalChoices();
       });
-      benefBox.appendChild(bb);
+      if (!acc.paidBy) benefBox.appendChild(bb);
     });
 
     $all("#exp-type .seg-btn").forEach(function (b) {
@@ -1133,6 +1141,7 @@
 
     $all("#exp-payer .chip-btn").forEach(function (b) {
       b.classList.toggle("selected", b.dataset.id === state.modalPayer);
+      b.hidden = !tr && !!b.dataset.disabled && b.dataset.id !== state.modalPayer;
     });
     $all("#exp-participants .chip-btn").forEach(function (b) {
       b.classList.toggle("selected", state.modalParts.indexOf(b.dataset.id) >= 0);
@@ -1157,10 +1166,11 @@
     if (!payer || !benef || payer === benef) return [];
     return state.data.expenses.filter(function (e) {
       return !isTransfer(e) && e.payerId === benef &&
-        e.participants.indexOf(payer) >= 0;
+        e.participants.some(function (p) { return bearer(p) === payer; });
     }).map(function (e) {
       var parts = e.participants.filter(function (p) { return member(p).name !== "?"; });
-      return { exp: e, share: parts.length ? toCad(e) / parts.length : 0 };
+      var mine = parts.filter(function (p) { return bearer(p) === payer; }).length; // + la part d'Ambre pour Bastien
+      return { exp: e, share: parts.length ? toCad(e) / parts.length * mine : 0 };
     }).sort(function (a, b) { return (b.exp.date || "").localeCompare(a.exp.date || ""); });
   }
 
@@ -1244,7 +1254,7 @@
     $("#exp-date").value = expense ? expense.date : todayISO();
     state.modalCurrency = expense ? expense.currency : "CAD";
     state.modalPayer = expense ? expense.payerId : state.user.id;
-    state.modalParts = expense && !isTransfer(expense) ? expense.participants.slice() : CFG.accounts.map(function (a) { return a.id; });
+    state.modalParts = expense && !isTransfer(expense) ? expense.participants.slice() : CFG.accounts.filter(function (a) { return !a.disabled; }).map(function (a) { return a.id; });
     state.modalBenef = expense && isTransfer(expense) ? expense.participants[0] : null;
     state.modalDebts = {};
     state.modalCat = expense && !isTransfer(expense) ? expense.category : "food";
@@ -1386,11 +1396,11 @@
     if (wheelBuilt) return;
     wheelBuilt = true;
     var disc = $("#wheel-disc");
-    var stops = CFG.accounts.map(function (a, i) {
+    var stops = crew().map(function (a, i) {
       return a.color + " " + (i * 25) + "% " + ((i + 1) * 25) + "%";
     });
     disc.style.background = "conic-gradient(" + stops.join(",") + ")";
-    CFG.accounts.forEach(function (a, i) {
+    crew().forEach(function (a, i) {
       var ang = (i * 90 + 45) * Math.PI / 180;
       var el = document.createElement("span");
       el.className = "avatar-dot wheel-av";
@@ -1407,7 +1417,7 @@
   function weightedPickIndex() {
     var w = CFG.wheelWeights || {};
     var tot = 0;
-    var arr = CFG.accounts.map(function (a) {
+    var arr = crew().map(function (a) {
       var v = w[a.id] > 0 ? w[a.id] : 1;
       tot += v;
       return v;
@@ -1432,7 +1442,7 @@
     $("#wheel-result").innerHTML = "";
 
     var idx = weightedPickIndex();
-    var victim = CFG.accounts[idx];
+    var victim = crew()[idx];
     var chal = state.data.challenges[(Math.random() * state.data.challenges.length) | 0];
 
     // fait tourner l'aiguille jusqu'au quart du gagnant (+ un peu de flou)
@@ -1630,7 +1640,7 @@
       html += '<span class="pw-day' + (PL.isCours(d, PLAN_CFG) ? " is-cours" : "") + (d === today ? " is-today" : "") + '">' +
         "<b>" + esc(fmtDayShort.format(PL.parse(d)).replace(".", "")) + "</b>" + PL.parse(d).getDate() + "</span>";
     });
-    CFG.accounts.forEach(function (acc) {
+    crew().forEach(function (acc) {
       html += '<span class="pw-name">' + avatarDot(acc, "mini-dot") + "<span>" + esc(acc.name) + "</span></span>";
       for (var i = 0; i < 7;) {
         var p = PL.whereIs(plans, acc.id, days[i]), n = 1;
@@ -1647,7 +1657,7 @@
     });
     body.innerHTML = html + "</div>";
 
-    var free = PL.freeOn(plans, CFG.accounts.map(function (a) { return a.id; }), days).map(function (id) { return member(id).name; });
+    var free = PL.freeOn(plans, crew().map(function (a) { return a.id; }), days).map(function (id) { return member(id).name; });
     $("#plan-free").innerHTML = free.length
       ? "Dispo toute la semaine : <strong>" + esc(free.join(", ")) + "</strong>"
       : "Personne n'est dispo toute la semaine.";
@@ -1742,7 +1752,7 @@
     }
     var existing = plan.editing ? findPlan(plan.editing) : null;
     var p = planFields({
-      who: CFG.accounts.map(function (a) { return a.id; }).filter(function (id) { return plan.who.indexOf(id) >= 0; }),
+      who: crew().map(function (a) { return a.id; }).filter(function (id) { return plan.who.indexOf(id) >= 0; }),
       type: plan.type, place: $("#plan-place").value.trim(), from: from, to: to,
       createdBy: existing ? existing.createdBy : state.user.id,
       createdAt: existing ? existing.createdAt : new Date().toISOString()
@@ -1778,7 +1788,7 @@
 
   function bindPlanning() {
     var box = $("#plan-who");
-    CFG.accounts.forEach(function (acc) {
+    crew().forEach(function (acc) {
       var b = document.createElement("button");
       b.type = "button";
       b.className = "chip-btn";
@@ -2355,7 +2365,7 @@
     var opts = [""].concat([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     seenList.innerHTML = seen.length ? seen.map(function (m) {
       var r = m.ratings || {}, avg = movieAvg(m), mine = r[state.user.id];
-      var others = CFG.accounts.filter(function (a) { return a.id !== state.user.id && typeof r[a.id] === "number"; });
+      var others = crew().filter(function (a) { return a.id !== state.user.id && typeof r[a.id] === "number"; });
       return '<li class="wish-item seen-item"><span class="wish-ico">' + FILM_ICON + "</span>" +
         '<span class="wish-name">' + esc(m.name) + "</span>" +
         '<span class="seen-avg">' + (avg === null ? "—" : avg.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + "/10") + "</span>" +
@@ -2405,7 +2415,7 @@
     if (!list) return;
     if (!evWho) evWho = state.user.id;
     var mine = evWho === state.user.id, who = member(evWho);
-    $("#event-who").innerHTML = CFG.accounts.map(function (a) {
+    $("#event-who").innerHTML = crew().map(function (a) {
       return '<button type="button" class="filter-chip' + (a.id === evWho ? " active" : "") + '" data-who="' + esc(a.id) + '">' +
         avatarDot(a, "mini-dot") + "<span>" + esc(a.id === state.user.id ? "Moi" : a.name) + "</span></button>";
     }).join("");
@@ -2707,10 +2717,11 @@
     driverSpinning = true;
     var btn = $("#driver-spin"), slot = $("#driver-slot");
     btn.disabled = true;
-    var winner = CFG.accounts[(Math.random() * CFG.accounts.length) | 0];
+    var crewList = crew();
+    var winner = crewList[(Math.random() * crewList.length) | 0];
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     function step(n) {
-      var m = CFG.accounts[(Math.random() * CFG.accounts.length) | 0];
+      var m = crewList[(Math.random() * crewList.length) | 0];
       slot.textContent = m.name;
       slot.style.color = m.color;
       if (n <= 0 || reduce) {

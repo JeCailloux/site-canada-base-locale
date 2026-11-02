@@ -41,10 +41,13 @@ window.CARIBOU_CONFIG = {
   // name    : prénom affiché
   // password: mot de passe de connexion
   // color   : couleur de l'avatar (n'importe quel code hex)
+  // disabled: true = ne peut plus se connecter ni être choisi pour une dépense (son historique reste)
+  // paidBy  : pas de compte ; peut participer aux dépenses mais sa part est payée par ce compte
   accounts: [
     { id: "bastien", name: "Bastien", password: "poutine2026", color: "#F59E0B" },
     { id: "leo",     name: "Léo",     password: "sirop2026",   color: "#34D399" },
-    { id: "simon",   name: "Simon",   password: "orignal2026", color: "#A78BFA" },
-    { id: "axel",    name: "Axel",    password: "castor2026",  color: "#38BDF8" }
+    { id: "simon",   name: "Simon",   password: "orignal2026", color: "#A78BFA", disabled: true },
+    { id: "axel",    name: "Axel",    password: "castor2026",  color: "#38BDF8" },
+    { id: "ambre",   name: "Ambre",   color: "#F472B6", paidBy: "bastien" }
   ]
 };
