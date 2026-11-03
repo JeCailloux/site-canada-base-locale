@@ -119,8 +119,8 @@
     return { id: id, name: "?", color: "#64748B" };
   }
 
-  // disabled = plus de connexion ; paidBy = sans compte, sa part est payée par un autre
-  function canLogin(a) { return !a.disabled && !a.paidBy; }
+  // disabled = garde son compte mais n'est plus choisi pour les dépenses ; paidBy = sans compte, sa part est payée par un autre
+  function canLogin(a) { return !a.paidBy; }
   // comptes hors invités sans compte (roue, planning, events…)
   function crew() { return CFG.accounts.filter(function (a) { return !a.paidBy; }); }
   // qui supporte réellement la part de p

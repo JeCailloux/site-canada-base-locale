@@ -41,7 +41,7 @@ window.CARIBOU_CONFIG = {
   // name    : prénom affiché
   // password: mot de passe de connexion
   // color   : couleur de l'avatar (n'importe quel code hex)
-  // disabled: true = ne peut plus se connecter ni être choisi pour une dépense (son historique reste)
+  // disabled: true = peut se connecter mais n'est plus choisi pour une dépense (son historique reste)
   // paidBy  : pas de compte ; peut participer aux dépenses mais sa part est payée par ce compte
   accounts: [
     { id: "bastien", name: "Bastien", password: "poutine2026", color: "#F59E0B" },
